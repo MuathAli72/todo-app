@@ -5,25 +5,33 @@ public class TodoItem
     public string Title { get; }
     public bool IsDone { get; private set; }
 
-    
+    public Priority Priority { get; private set; } = Priority.Medium;
+    public Guid Id { get; } = Guid.NewGuid();
+
+
     public TodoItem(string title)
     {
         if (string.IsNullOrEmpty(title))
-    {
-        throw new ArgumentException("Title required");
-    }
+        {
+            throw new ArgumentException("Title required");
+        }
         Title = title;
         IsDone = false;
     }
 
-    public void Complete()
+    internal void Complete()
     {
         IsDone = true;
     }
 
-    public void Reopen()
+    internal void Reopen()
     {
         IsDone = false;
+    }
+
+    public void ChangePriority(Priority newPriority)
+    {
+        Priority = newPriority;
     }
 
 
