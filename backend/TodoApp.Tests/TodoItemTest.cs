@@ -22,12 +22,13 @@ public class TodoItemTest
         list.ReopenTask(task.Id);
         Assert.False(task.IsDone);
     }
-  
+
     [Fact]
     public void Changing_to_an_allowed_priority()
     {
-        var task = new TodoItem("Buy milk");
-        task.ChangePriority(Priority.Low);
+        var list = new TodoList();
+        var task = list.AddTask("Buy milk");
+        list.ChangePriority(task.Id, Priority.Low);
         Assert.Equal(Priority.Low, task.Priority);
     }
 
@@ -63,6 +64,17 @@ public class TodoItemTest
         Assert.Throws<ArgumentException>(() => list.AddTask(""));
         Assert.Empty(list.Tasks);
     }
+
+    [Fact]
+    public void Changing_a_tasks_due_date()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Buy milk");
+        var newDate = new DateTime(2026, 10, 5);
+        list.ChangeDueDate(task.Id, newDate);
+        Assert.Equal(newDate, task.DueDate);
+    }
+
 
 
 
