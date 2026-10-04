@@ -75,6 +75,23 @@ public class TodoItemTest
         Assert.Equal(newDate, task.DueDate);
     }
 
+    [Fact]
+    public void Editing_a_tasks_title()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Buy milk");
+        list.EditTitle(task.Id, "Buy oat milk");
+        Assert.Equal("Buy oat milk", task.Title);
+    }
+
+    [Fact]
+    public void Editing_a_tasks_title_to_empty_is_rejected()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Buy milk");
+        Assert.Throws<ArgumentException>(() => list.EditTitle(task.Id, ""));
+    }
+
 
 
 

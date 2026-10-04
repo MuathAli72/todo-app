@@ -70,7 +70,22 @@ app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request) =>
     return Results.NoContent();
 });
 
+
+app.MapPatch("/tasks/{id}/title", (Guid id, EditTitleRequest request) =>
+{
+    try
+    {
+        list.EditTitle(id, request.Title);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.Run();
 public record CreateTaskRequest(string Title);
 public record ChangePriorityRequest(string Priority);
 public record ChangeDueDateRequest(string DueDate);
+public record EditTitleRequest(string Title);

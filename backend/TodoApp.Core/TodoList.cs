@@ -56,5 +56,14 @@ public class TodoList
         }
     }
 
+    public void EditTitle(Guid id, string newTitle)
+    {
+        var task = tasks.FirstOrDefault(t => t.Id == id);
+        if (task != null)
+        {
+            task.EditTitle(newTitle);
+        }
+    }
+
     public IReadOnlyList<TodoItem> Tasks => tasks.AsReadOnly();
 }

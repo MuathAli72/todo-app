@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
+import './App.css'
 
 function App() {
-
 
   type Task = {
     id: string
@@ -15,7 +15,27 @@ function App() {
   const [newTitle, setNewTitle] = useState('')
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
   const priorityNames = ['low', 'medium', 'high']
+  const priorityClasses = ['priority-low', 'priority-medium', 'priority-high']
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
 
+
+  function saveTitle(task: Task) {
+    fetch(`http://localhost:5149/tasks/${task.id}/title`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: editingTitle })
+    })
+      .then(() => {
+        setTasks(tasks.map(t => {
+          if (t.id === task.id) {
+            return { ...t, title: editingTitle }
+          }
+          return t
+        }))
+        setEditingTaskId(null)
+      })
+  }
   function changePriority(task: Task, newPriority: number) {
     fetch(`http://localhost:5149/tasks/${task.id}/priority`, {
       method: 'PATCH',
@@ -31,10 +51,23 @@ function App() {
         }))
       })
   }
+
   useEffect(() => {
     fetch('http://localhost:5149/tasks')
       .then(response => response.json())
       .then(data => setTasks(data))
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside() {
+      setExpandedTaskId(null)
+    }
+
+    document.addEventListener('click', handleClickOutside)
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
   }, [])
 
   function toggleTask(task: Task) {
@@ -78,29 +111,52 @@ function App() {
       })
   }
 
-
-
   return (
-    <div>
+    <div className="app">
       <h1>My Todo App</h1>
-      <ul>
+      <ul className="task-list">
         {tasks.map(task => (
-          <li key={task.id}>
-            <input
-              type="checkbox"
-              checked={task.isDone}
-              onChange={() => toggleTask(task)}
-            />
-            {task.dueDate && <span> — due {task.dueDate.slice(0, 16).replace('T', ' ')}</span>}
-            {task.title}
-            <button onClick={() => deleteTask(task)}>Delete</button>
-            <button onClick={() => { setExpandedTaskId(expandedTaskId === task.id ? null : task.id) }}>
-              More options
-            </button>
-
+          <li key={task.id} className={`task ${priorityClasses[task.priority]}`}>
+            <div className="task-row">
+              <input
+                type="checkbox"
+                checked={task.isDone}
+                onChange={() => toggleTask(task)}
+              />
+              {editingTaskId === task.id ? (
+                <input
+                  value={editingTitle}
+                  onChange={e => setEditingTitle(e.target.value)}
+                  onBlur={() => saveTitle(task)}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  className={`task-title ${task.isDone ? 'done' : ''}`}
+                  onClick={() => {
+                    setEditingTaskId(task.id)
+                    setEditingTitle(task.title)
+                  }}
+                >
+                  {task.title}
+                </span>
+              )}
+              {task.dueDate && (
+                <span className="task-due">
+                  due {task.dueDate.slice(0, 16).replace('T', ' ')}
+                </span>
+              )}
+              <button onClick={() => deleteTask(task)}>Delete</button>
+              <button onClick={e => {
+                e.stopPropagation()
+                setExpandedTaskId(expandedTaskId === task.id ? null : task.id)
+              }}>
+                More options
+              </button>
+            </div>
 
             {expandedTaskId === task.id && (
-              <div>
+              <div className="task-options" onClick={e => e.stopPropagation()}>
                 <select
                   value={task.priority}
                   onChange={e => changePriority(task, Number(e.target.value))}
@@ -119,26 +175,28 @@ function App() {
           </li>
         ))}
       </ul>
-      <input
-        value={newTitle}
-        onChange={e => setNewTitle(e.target.value)}
-      />
 
-      <button onClick={() => {
-        fetch('http://localhost:5149/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle })
-        })
-          .then(response => response.json())
-          .then(newTask => {
-            setTasks([...tasks, newTask])
-            setNewTitle('')
+      <div className="add-row">
+        <input
+          value={newTitle}
+          onChange={e => setNewTitle(e.target.value)}
+          placeholder="Add a task..."
+        />
+        <button onClick={() => {
+          fetch('http://localhost:5149/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle })
           })
-      }}>
-        Add
-      </button>
-
+            .then(response => response.json())
+            .then(newTask => {
+              setTasks([...tasks, newTask])
+              setNewTitle('')
+            })
+        }}>
+          Add
+        </button>
+      </div>
     </div>
   )
 }
