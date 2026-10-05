@@ -26,7 +26,10 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: editingTitle })
     })
-      .then(() => {
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
         setTasks(tasks.map(t => {
           if (t.id === task.id) {
             return { ...t, title: editingTitle }
@@ -35,6 +38,9 @@ function App() {
         }))
         setEditingTaskId(null)
       })
+      .catch(err => {
+        alert(err.message)
+      })
   }
   function changePriority(task: Task, newPriority: number) {
     fetch(`http://localhost:5149/tasks/${task.id}/priority`, {
@@ -42,13 +48,19 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ priority: priorityNames[newPriority] })
     })
-      .then(() => {
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
         setTasks(tasks.map(t => {
           if (t.id === task.id) {
             return { ...t, priority: newPriority }
           }
           return t
         }))
+      })
+      .catch(err => {
+        alert(err.message)
       })
   }
 
@@ -76,7 +88,10 @@ function App() {
     fetch(`http://localhost:5149/tasks/${task.id}/${action}`, {
       method: 'PATCH'
     })
-      .then(() => {
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
         setTasks(tasks.map(t => {
           if (t.id === task.id) {
             return { ...t, isDone: !t.isDone }
@@ -84,14 +99,23 @@ function App() {
           return t
         }))
       })
+      .catch(err => {
+        alert(err.message)
+      })
   }
 
   function deleteTask(task: Task) {
     fetch(`http://localhost:5149/tasks/${task.id}`, {
       method: 'DELETE'
     })
-      .then(() => {
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
         setTasks(tasks.filter(t => t.id !== task.id))
+      })
+      .catch(err => {
+        alert(err.message)
       })
   }
 
@@ -101,13 +125,19 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dueDate: newDate })
     })
-      .then(() => {
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
         setTasks(tasks.map(t => {
           if (t.id === task.id) {
             return { ...t, dueDate: newDate }
           }
           return t
         }))
+      })
+      .catch(err => {
+        alert(err.message)
       })
   }
 
@@ -188,10 +218,18 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: newTitle })
           })
-            .then(response => response.json())
+            .then(response => {
+              if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error) })
+              }
+              return response.json()
+            })
             .then(newTask => {
               setTasks([...tasks, newTask])
               setNewTitle('')
+            })
+            .catch(err => {
+              alert(err.message)
             })
         }}>
           Add
