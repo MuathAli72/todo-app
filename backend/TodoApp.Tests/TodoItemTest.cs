@@ -92,6 +92,21 @@ public class TodoItemTest
         Assert.Throws<ArgumentException>(() => list.EditTitle(task.Id, ""));
     }
 
+    [Fact]
+    public void Adding_a_task_with_only_spaces_is_rejected()
+    {
+        var list = new TodoList();
+        Assert.Throws<ArgumentException>(() => list.AddTask("   "));
+        Assert.Empty(list.Tasks);
+    }
+
+    [Fact]
+    public void Editing_a_title_to_only_spaces_is_rejected()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Buy milk");
+        Assert.Throws<ArgumentException>(() => list.EditTitle(task.Id, "   "));
+    }
 
 
 

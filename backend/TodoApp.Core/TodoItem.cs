@@ -11,7 +11,7 @@ public class TodoItem
 
     public TodoItem(string title)
     {
-        if (string.IsNullOrEmpty(title))
+        if (string.IsNullOrWhiteSpace(title))
         {
             throw new ArgumentException("Title required");
         }
@@ -41,7 +41,7 @@ public class TodoItem
 
     internal void EditTitle(string newTitle)
 {
-    if (string.IsNullOrEmpty(newTitle))
+    if (string.IsNullOrWhiteSpace(newTitle))
     {
         throw new ArgumentException("Title required");
     }

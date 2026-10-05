@@ -1,7 +1,9 @@
+using FluentValidation;
 using TodoApp.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateTaskRequestValidator>();
 var app = builder.Build();
 
 
@@ -17,8 +19,14 @@ var list = new TodoList();
 
 app.MapGet("/tasks", () => list.Tasks);
 
-app.MapPost("/tasks", (CreateTaskRequest request) =>
+app.MapPost("/tasks", (CreateTaskRequest request, IValidator<CreateTaskRequest> validator) =>
 {
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+    }
+
     try
     {
         var task = list.AddTask(request.Title);
@@ -71,8 +79,13 @@ app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request) =>
 });
 
 
-app.MapPatch("/tasks/{id}/title", (Guid id, EditTitleRequest request) =>
+app.MapPatch("/tasks/{id}/title", (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator) =>
 {
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+    }
     try
     {
         list.EditTitle(id, request.Title);
