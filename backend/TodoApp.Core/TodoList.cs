@@ -47,12 +47,13 @@ public class TodoList
         }
     }
 
-    public void ChangeDueDate(Guid id, DateTime? newDate)
+    public void ChangeDueDate(Guid id, DateOnly? newDate, TimeOnly? newTime)
     {
         var task = tasks.FirstOrDefault(t => t.Id == id);
         if (task != null)
         {
-            task.ChangeDueDate(newDate);
+            task.ChangeDueDate(newDate, newTime);
+            
         }
     }
 

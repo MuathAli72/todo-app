@@ -56,28 +56,48 @@ app.MapDelete("/tasks/{id}", (Guid id) =>
     return Results.NoContent();
 });
 
-app.MapPatch("/tasks/{id}/priority", (Guid id, ChangePriorityRequest request) =>
+app.MapPatch("/tasks/{id}/priority", (Guid id, ChangePriorityRequest request, IValidator<ChangePriorityRequest> validator) =>
 {
-    if (!Enum.TryParse<Priority>(request.Priority, true, out var priority))
+    var result = validator.Validate(request);
+    if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = "Priority must be low, medium or high" });
+        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
     }
 
-    list.ChangePriority(id, priority);
-    return Results.NoContent();
+    var priority = Enum.Parse<Priority>(request.Priority, true);
+
+    try
+    {
+        list.ChangePriority(id, priority);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
 });
 
-app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request) =>
+app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request, IValidator<ChangeDueDateRequest> validator) =>
 {
-    if (!DateTime.TryParse(request.DueDate, out var parsedDate))
+    var result = validator.Validate(request);
+    if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = "Enter date as YYYY-MM-DD" });
+        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
     }
 
-    list.ChangeDueDate(id, parsedDate);
-    return Results.NoContent();
-});
+    DateOnly? dueDate = string.IsNullOrEmpty(request.DueDate) ? null : DateOnly.Parse(request.DueDate);
+    TimeOnly? dueTime = string.IsNullOrEmpty(request.DueTime) ? null : TimeOnly.Parse(request.DueTime);
 
+    try
+    {
+        list.ChangeDueDate(id, dueDate, dueTime);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
 
 app.MapPatch("/tasks/{id}/title", (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator) =>
 {
@@ -100,5 +120,5 @@ app.MapPatch("/tasks/{id}/title", (Guid id, EditTitleRequest request, IValidator
 app.Run();
 public record CreateTaskRequest(string Title);
 public record ChangePriorityRequest(string Priority);
-public record ChangeDueDateRequest(string DueDate);
+public record ChangeDueDateRequest(string? DueDate, String? DueTime);
 public record EditTitleRequest(string Title);

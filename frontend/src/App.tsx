@@ -1,24 +1,69 @@
 import { useState, useEffect } from 'react'
 import './App.css'
+import { z } from 'zod'
 
-function App() {
+const TaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  isDone: z.boolean(),
+  priority: z.number().int().min(0).max(2),
+  dueDate: z.string().nullable(),
+  dueTime: z.string().nullable(),
+})
 
-  type Task = {
-    id: string
-    title: string
-    isDone: boolean
-    priority: number
-    dueDate: string | null
+type Task = z.infer<typeof TaskSchema>
+
+const DateInputSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+
+function nextDateFor(time: string): string {
+  const [hours, minutes] = time.split(':').map(Number)
+  const target = new Date()
+  target.setHours(hours, minutes, 0, 0)
+
+  if (target < new Date()) {
+    target.setDate(target.getDate() + 1)
   }
 
+  const year = target.getFullYear()
+  const month = String(target.getMonth() + 1).padStart(2, '0')
+  const day = String(target.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [newTitle, setNewTitle] = useState('')
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
-  const priorityNames = ['low', 'medium', 'high']
-  const priorityClasses = ['priority-low', 'priority-medium', 'priority-high']
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
+  const priorityNames = ['low', 'medium', 'high']
+  const priorityClasses = ['priority-low', 'priority-medium', 'priority-high']
 
+  useEffect(() => {
+    fetch('http://localhost:5149/tasks')
+      .then(response => response.json())
+      .then(data => {
+        const result = z.array(TaskSchema).safeParse(data)
+        if (!result.success) {
+          console.error(result.error)
+          alert('The server sent tasks in an unexpected shape.')
+          return
+        }
+        setTasks(result.data)
+      })
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside() {
+      setExpandedTaskId(null)
+    }
+
+    document.addEventListener('click', handleClickOutside)
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [])
 
   function saveTitle(task: Task) {
     fetch(`http://localhost:5149/tasks/${task.id}/title`, {
@@ -42,6 +87,7 @@ function App() {
         alert(err.message)
       })
   }
+
   function changePriority(task: Task, newPriority: number) {
     fetch(`http://localhost:5149/tasks/${task.id}/priority`, {
       method: 'PATCH',
@@ -63,24 +109,6 @@ function App() {
         alert(err.message)
       })
   }
-
-  useEffect(() => {
-    fetch('http://localhost:5149/tasks')
-      .then(response => response.json())
-      .then(data => setTasks(data))
-  }, [])
-
-  useEffect(() => {
-    function handleClickOutside() {
-      setExpandedTaskId(null)
-    }
-
-    document.addEventListener('click', handleClickOutside)
-
-    return () => {
-      document.removeEventListener('click', handleClickOutside)
-    }
-  }, [])
 
   function toggleTask(task: Task) {
     const action = task.isDone ? 'reopen' : 'complete'
@@ -119,11 +147,11 @@ function App() {
       })
   }
 
-  function changeDueDate(task: Task, newDate: string) {
+  function changeDueDate(task: Task, date: string | null, time: string | null) {
     fetch(`http://localhost:5149/tasks/${task.id}/due-date`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dueDate: newDate })
+      body: JSON.stringify({ dueDate: date ?? '', dueTime: time ?? '' })
     })
       .then(response => {
         if (!response.ok) {
@@ -131,7 +159,7 @@ function App() {
         }
         setTasks(tasks.map(t => {
           if (t.id === task.id) {
-            return { ...t, dueDate: newDate }
+            return { ...t, dueDate: date, dueTime: time }
           }
           return t
         }))
@@ -173,7 +201,7 @@ function App() {
               )}
               {task.dueDate && (
                 <span className="task-due">
-                  due {task.dueDate.slice(0, 16).replace('T', ' ')}
+                  due {task.dueDate}{task.dueTime && ` ${task.dueTime.slice(0, 5)}`}
                 </span>
               )}
               <button onClick={() => deleteTask(task)}>Delete</button>
@@ -196,10 +224,39 @@ function App() {
                   <option value={2}>High</option>
                 </select>
                 <input
-                  type="datetime-local"
-                  value={task.dueDate ? task.dueDate.slice(0, 16) : ''}
-                  onChange={e => changeDueDate(task, e.target.value)}
+                  key={`date-${task.dueDate ?? 'none'}`}
+                  type="date"
+                  max="9999-12-31"
+                  defaultValue={task.dueDate ?? ''}
+                  onBlur={e => {
+                    const date = e.target.value
+                    if (date === '' || date === task.dueDate) return
+                    if (!DateInputSchema.safeParse(date).success) {
+                      e.target.value = task.dueDate ?? ''
+                      alert('Please enter a real date.')
+                      return
+                    }
+                    changeDueDate(task, date, task.dueTime)
+                  }}
                 />
+                <input
+                  key={`time-${task.dueTime ?? 'none'}`}
+                  type="time"
+                  defaultValue={task.dueTime ? task.dueTime.slice(0, 5) : ''}
+                  onBlur={e => {
+                    const time = e.target.value
+                    const current = task.dueTime ? task.dueTime.slice(0, 5) : ''
+                    if (time === current) return
+                    if (time === '') {
+                      if (task.dueDate) changeDueDate(task, task.dueDate, null)
+                      return
+                    }
+                    changeDueDate(task, task.dueDate ?? nextDateFor(time), time)
+                  }}
+                />
+                {task.dueDate && (
+                  <button onClick={() => changeDueDate(task, null, null)}>Remove date</button>
+                )}
               </div>
             )}
           </li>

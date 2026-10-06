@@ -66,16 +66,6 @@ public class TodoItemTest
     }
 
     [Fact]
-    public void Changing_a_tasks_due_date()
-    {
-        var list = new TodoList();
-        var task = list.AddTask("Buy milk");
-        var newDate = new DateTime(2026, 10, 5);
-        list.ChangeDueDate(task.Id, newDate);
-        Assert.Equal(newDate, task.DueDate);
-    }
-
-    [Fact]
     public void Editing_a_tasks_title()
     {
         var list = new TodoList();
@@ -108,6 +98,55 @@ public class TodoItemTest
         Assert.Throws<ArgumentException>(() => list.EditTitle(task.Id, "   "));
     }
 
+    [Fact]
+    public void Changing_to_an_undefined_priority_is_rejected()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Buy milk");
+        Assert.Throws<ArgumentException>(() => list.ChangePriority(task.Id, (Priority)5));
+    }
+
+    [Fact]
+    public void Setting_a_due_date_without_a_time()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Pay the bill");
+        var date = new DateOnly(2026, 10, 9);
+        list.ChangeDueDate(task.Id, date, null);
+        Assert.Equal(date, task.DueDate);
+        Assert.Null(task.DueTime);
+    }
+
+    [Fact]
+    public void Setting_a_due_date_with_a_time()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Meeting");
+        var date = new DateOnly(2026, 10, 9);
+        var time = new TimeOnly(15, 0);
+        list.ChangeDueDate(task.Id, date, time);
+        Assert.Equal(date, task.DueDate);
+        Assert.Equal(time, task.DueTime);
+    }
+
+    [Fact]
+    public void Setting_a_time_without_a_date_is_rejected()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Meeting");
+        Assert.Throws<ArgumentException>(() => list.ChangeDueDate(task.Id, null, new TimeOnly(15, 0)));
+    }
+
+    [Fact]
+    public void Removing_the_due_date_also_removes_the_time()
+    {
+        var list = new TodoList();
+        var task = list.AddTask("Meeting");
+        list.ChangeDueDate(task.Id, new DateOnly(2026, 10, 9), new TimeOnly(15, 0));
+        list.ChangeDueDate(task.Id, null, null);
+        Assert.Null(task.DueDate);
+        Assert.Null(task.DueTime);
+    }
 
 
 }
