@@ -1,71 +1,147 @@
-# Todo App — Proof of Concept
+# Todo App
 
-A simple to-do list app, built as a learning exercise applying Domain-Driven Design (DDD), Behavior-Driven Development (BDD), and Test-Driven Development (TDD) — meant to be simple rather than fully ready to be shipped, since the goal was to show good judgment about *when* to use these patterns, not to use every pattern available.
+A to-do list app built to practice Domain-Driven Design (DDD), Behavior-Driven Development (BDD), and Test-Driven Development (TDD), plus layered validation, a real database, and debugging.
 
-Backend: C# (.NET). Frontend: React + TypeScript (no framework ceremony beyond that). No database — tasks live in memory while the server runs.
+- **Backend:** C# / .NET, ASP.NET Core minimal API
+- **Frontend:** React + TypeScript (Vite)
+- **Database:** PostgreSQL, through Entity Framework Core
+- **Validation:** Zod (frontend), FluentValidation (API), domain rules, database constraints
 
-## What a Task is
+## What a task is
 
-Every task has:
-- **Title** — required, can't be empty
-- **Due date** — optional, includes a specific time and date
-- **Priority** — Low, Medium, or High (defaults to Medium)
-- **IsDone** — whether it's completed
+| Field | Required? | Notes |
+|---|---|---|
+| Title | Yes | Can't be empty or only spaces |
+| Priority | Yes | Low, Medium, or High. Defaults to Medium |
+| IsDone | Yes | Starts as not done |
+| Due date | No | A day, with no time attached |
+| Due time | No | Only allowed if there's a due date |
+| Created at | Automatic | Used to keep tasks in the order they were made |
 
+There's no description field. A to-do list is about getting things done, not explaining them, so it was left out on purpose.
 
-Two rules are enforced, no matter how a request arrives (UI, or directly against the API):
-1. A task's title can't be empty.
-2. Priority must be exactly Low, Medium, or High which is translated to numbers in API and backend (0-1-2) — nothing else is accepted.
+**Rules** (enforced no matter how a request arrives):
+1. A title can't be empty or only spaces.
+2. Priority must be Low, Medium, or High. Nothing else, including numbers.
+3. A time can't exist without a date.
 
-Actions: create, edit title, edit priority, edit due date, complete, reopen (un-complete), delete.
+**Actions:** add, edit title, change priority, set or remove due date and time, complete, reopen, delete.
 
-## What the app actually does (the scenarios)
+## How due dates work
 
-These were written before any code, and the tests are built directly from them:
+- **Date only:** "Pay the bill by Friday."
+- **Date and time:** "Meeting Friday at 3pm."
+- **Neither:** not every task has a deadline.
+- **Time only:** the app uses the next time that clock time comes around. At 9am, picking 3pm means today at 3pm. At 11pm, picking 1am means tomorrow at 1am.
+
+The "time only" convenience lives in the **frontend**, because "today" depends on the user's own clock, which only the user's browser knows. The server could be in another time zone. The backend itself always requires a date with a time, so anything calling the API directly (like Postman) has to send both.
+
+## Behavior scenarios
+
+Written before the code. The tests are built from them.
 
 - Adding a task with a title
-- Adding a task with an empty title (rejected)
-- Marking a task done
-- Reopening a done task
-- Rejecting a priority that doesn't exist
+- Adding a task with an empty title, or only spaces, is rejected
+- Marking a task done, and reopening it
 - Changing to an allowed priority
-- Deleting a task
-- Changing a task's due date
+- Changing to a priority that doesn't exist is rejected
+- Editing a title, and editing it to empty or only spaces is rejected
+- Setting a due date with no time, and with a time
+- Setting a time without a date is rejected
+- Removing the due date also removes the time
+- Deleting a task removes only that task
 
-## How it's structured, and why
+## How it's built
 
-**`TodoList` is the only way to change a task.** It's what DDD calls an Aggregate Root — the single gatekeeper for everything inside it. You can't reach into a task and change it directly from outside; every change goes through `TodoList`, and the task's own "complete," "reopen," etc. methods are locked (`internal`) so nothing outside the core project can call them directly, even by accident.
+### Three backend projects
+- **TodoApp.Core:** the business rules (`TodoItem`, `TodoList`). Knows nothing about the web or the database.
+- **TodoApp.Tests:** tests for those rules. They run without a database.
+- **TodoApp.Api:** the web routes, validators, and database code.
 
-**Storage is swappable.** `TodoList` only exposes a handful of methods (add, complete, delete, etc.) — nothing outside it knows or cares that the tasks are just sitting in memory right now. If this needed a real database later, only the inside of `TodoList` would change. The API routes and the entire frontend would stay exactly as they are.
+Core doesn't reference the other two, so the rules can't accidentally depend on web or database details. The compiler enforces that.
 
-**The API never trusts the caller.** Even though the UI only offers valid priority choices, the backend still checks every request itself. The UI can't reliably prevent someone from calling the API directly (a different frontend, a tool like Postman, a mistake in a future version of the UI) — so the rule has to live on the backend regardless of what the UI allows.
+### `TodoList` is the only way to change a task
+In DDD terms, it's the **aggregate root**. Outside code asks the list to complete, rename, or delete a task. The task's own change methods are `internal`, so code outside the Core project can't call them, even by accident.
 
-## What was deliberately left out, and why
+### Saving: load, work, save
+For every request, a **repository** loads the tasks from the database into a `TodoList`, the list does its work with all its rules, and the repository saves the changes back. The rules never know a database exists. That's why the tests never needed changing when the database was added.
 
-- **Reminders / notifications** — a real, separate feature (background checks, browser permissions) that wasn't needed to prove the core idea works.
-- **Login / accounts** — there's no multi-user concept at all, so there's one shared list for everyone using the app.
-- **A real database** — tasks are stored in memory and are lost when the server restarts. Kept this way on purpose, to avoid extra setup that wasn't needed for a proof of concept.
-- **Strict date format checking** — the due-date field accepts any format C#'s built-in date parser understands, rather than enforcing one exact format.
+Database calls use `async`/`await`, so the server can handle other requests while it waits for the database.
 
+### Four layers of validation
 
-## Real corrections made along the way
+| Layer | Where | What it's for |
+|---|---|---|
+| Zod | Frontend | Instant feedback on titles and dates. Also checks that tasks coming back from the backend have the expected shape |
+| FluentValidation | API | Checks each request is readable before anything else runs |
+| Domain rules | `TodoItem` / `TodoList` | The real business rules. The authority |
+| CHECK constraints | PostgreSQL | Protect the stored data, even if something writes to the database without going through the backend |
 
-- **Titles needed to be editable.** The original plan allowed editing priority and due date after a task was created, but not the title itself — an inconsistency, not a deliberate choice. Fixed by adding the same create/edit/validate pattern already used for the other fields.
+The frontend check is for speed. The backend and database checks are the ones that can't be skipped.
+
+### The database table
+
+One table, `Tasks`:
+
+| Column | Type | Notes |
+|---|---|---|
+| Id | uuid | Primary key |
+| Title | text | Not empty, not only spaces |
+| IsDone | boolean | |
+| Priority | integer | 0 = Low, 1 = Medium, 2 = High |
+| DueDate | date | Optional |
+| DueTime | time | Optional, only with a date |
+| CreatedAt | timestamp with time zone | Stored in UTC |
+
+The table is created from the C# classes using EF Core **migrations**, so anyone can recreate it with one command.
+
+## Bugs found, and how
+
+- **Rejected tasks showed up as blank tasks.** Stepping through the backend with the Visual Studio debugger showed the backend was correctly rejecting empty titles. The real problem was the frontend, which treated the error response as if it were a new task. Fixed by checking every response for success before using it.
+- **A priority of "5" was accepted.** C#'s `Enum.TryParse` accepts numbers, not just names, and doesn't check the number is a real priority. Found by testing an unusual input instead of only the obvious wrong one. Fixed in the domain and in the validator, which now only accepts the words.
+- **A due date without a time couldn't be saved,** and a half-filled date box could erase an existing date. The browser's combined date-and-time box reports itself as empty until both parts are filled. This led to splitting date and time into separate optional fields, and adding a Remove date button.
+- **Typing a year got interrupted after one digit,** and actually saved years like 0002. The app saved on every keystroke, which redrew the box mid-typing. Fixed by saving only when the user leaves the box.
+- **The date box froze the page.** An invalid year failed to save but stayed in the box, so every click elsewhere sent it again and showed another error. Fixed by checking the date first and putting the saved value back when it's invalid.
+
+## Known limitations, on purpose
+
+- **No reminders or notifications.** A separate feature that wasn't needed to prove the core idea.
+- **No accounts.** There's one shared list. A multi-user version would load and save a list per user.
+- **The API sends priority as a number but accepts it as a word.** It works, but sending words both ways would be tidier.
+- **The API accepts any date format C# can read.** The frontend always sends YYYY-MM-DD.
+- **Styling was done last.** Functionality was built and tested first.
 
 ## Running it
 
-Two terminals, both need to stay open at the same time:
+**You need:** the .NET 10 SDK, Node.js, and PostgreSQL.
 
-**Backend:**
+**1. Point the backend at your database.** From `backend/TodoApp.Api`, store your connection string as a user secret, so the password never goes into Git:
+
 ```
-cd backend/TodoApp.Api
-dotnet run
+dotnet user-secrets set "ConnectionStrings:TodoDb" "Host=localhost;Port=5432;Database=todoapp;Username=postgres;Password=YOUR_PASSWORD"
 ```
 
-**Frontend:**
+**2. Create the database table.** In Visual Studio, open the Package Manager Console with `TodoApp.Api` as the default project and run `Update-Database`. Or from the command line:
+
+```
+dotnet tool install --global dotnet-ef
+dotnet ef database update --project backend/TodoApp.Api
+```
+
+**3. Start the backend:** press F5 in Visual Studio, or run `dotnet run` in `backend/TodoApp.Api`. It listens on `http://localhost:5149`.
+
+**4. Start the frontend:**
+
 ```
 cd frontend
+npm install
 npm run dev
 ```
 
+Then open the address it prints, usually `http://localhost:5173`.
 
+**Tests:** Test Explorer in Visual Studio, or `dotnet test` in `backend`.
+
+## Future ideas
+
+- **Repeating tasks** for daily and weekly routines, like "gym at 5 on Mon/Wed/Fri" or "brush teeth twice a day." The hard part is that "done" becomes "done on a given day," which needs a separate record of completions. That would also be the first real cross-task rule in the app, the point where the aggregate root earns its place beyond demonstrating the pattern.
