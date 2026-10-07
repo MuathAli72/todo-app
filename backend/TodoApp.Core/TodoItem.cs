@@ -7,9 +7,13 @@ public class TodoItem
     public Priority Priority { get; private set; } = Priority.Medium;
     public DateOnly? DueDate { get; private set; }
     public TimeOnly? DueTime { get; private set; }
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; private set; } = Guid.NewGuid();
+    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
 
-
+    private TodoItem()
+    {
+        Title = "";
+    }
     public TodoItem(string title)
     {
         if (string.IsNullOrWhiteSpace(title))
@@ -56,6 +60,6 @@ public class TodoItem
     }
     Title = newTitle;
 }
-
+   
 
 }

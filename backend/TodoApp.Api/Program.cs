@@ -1,25 +1,28 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using TodoApp.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateTaskRequestValidator>();
+builder.Services.AddDbContext<TodoDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("TodoDb")));
+builder.Services.AddScoped<TodoListRepository>();
+
 var app = builder.Build();
-
-
 
 app.UseCors(policy => policy
     .WithOrigins("http://localhost:5173")
     .AllowAnyMethod()
     .AllowAnyHeader());
 
+app.MapGet("/tasks", async (TodoListRepository repo) =>
+{
+    var list = await repo.LoadAsync();
+    return list.Tasks;
+});
 
-
-var list = new TodoList();
-
-app.MapGet("/tasks", () => list.Tasks);
-
-app.MapPost("/tasks", (CreateTaskRequest request, IValidator<CreateTaskRequest> validator) =>
+app.MapPost("/tasks", async (CreateTaskRequest request, IValidator<CreateTaskRequest> validator, TodoListRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -27,9 +30,11 @@ app.MapPost("/tasks", (CreateTaskRequest request, IValidator<CreateTaskRequest> 
         return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
     }
 
+    var list = await repo.LoadAsync();
     try
     {
         var task = list.AddTask(request.Title);
+        await repo.SaveAsync(list);
         return Results.Created($"/tasks/{task.Id}", task);
     }
     catch (ArgumentException ex)
@@ -38,25 +43,44 @@ app.MapPost("/tasks", (CreateTaskRequest request, IValidator<CreateTaskRequest> 
     }
 });
 
-app.MapPatch("/tasks/{id}/complete", (Guid id) =>
+app.MapPatch("/tasks/{id}/complete", async (Guid id, TodoListRepository repo) =>
 {
+    var list = await repo.LoadAsync();
     list.CompleteTask(id);
+    await repo.SaveAsync(list);
     return Results.NoContent();
 });
 
-app.MapPatch("/tasks/{id}/reopen", (Guid id) =>
+app.MapPatch("/tasks/{id}/reopen", async (Guid id, TodoListRepository repo) =>
 {
+    var list = await repo.LoadAsync();
     list.ReopenTask(id);
+    await repo.SaveAsync(list);
     return Results.NoContent();
 });
 
-app.MapDelete("/tasks/{id}", (Guid id) =>
+app.MapPatch("/tasks/{id}/title", async (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator, TodoListRepository repo) =>
 {
-    list.DeleteTask(id);
-    return Results.NoContent();
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+    }
+
+    var list = await repo.LoadAsync();
+    try
+    {
+        list.EditTitle(id, request.Title);
+        await repo.SaveAsync(list);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
 });
 
-app.MapPatch("/tasks/{id}/priority", (Guid id, ChangePriorityRequest request, IValidator<ChangePriorityRequest> validator) =>
+app.MapPatch("/tasks/{id}/priority", async (Guid id, ChangePriorityRequest request, IValidator<ChangePriorityRequest> validator, TodoListRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -66,9 +90,11 @@ app.MapPatch("/tasks/{id}/priority", (Guid id, ChangePriorityRequest request, IV
 
     var priority = Enum.Parse<Priority>(request.Priority, true);
 
+    var list = await repo.LoadAsync();
     try
     {
         list.ChangePriority(id, priority);
+        await repo.SaveAsync(list);
         return Results.NoContent();
     }
     catch (ArgumentException ex)
@@ -77,7 +103,7 @@ app.MapPatch("/tasks/{id}/priority", (Guid id, ChangePriorityRequest request, IV
     }
 });
 
-app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request, IValidator<ChangeDueDateRequest> validator) =>
+app.MapPatch("/tasks/{id}/due-date", async (Guid id, ChangeDueDateRequest request, IValidator<ChangeDueDateRequest> validator, TodoListRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -88,9 +114,11 @@ app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request, IVa
     DateOnly? dueDate = string.IsNullOrEmpty(request.DueDate) ? null : DateOnly.Parse(request.DueDate);
     TimeOnly? dueTime = string.IsNullOrEmpty(request.DueTime) ? null : TimeOnly.Parse(request.DueTime);
 
+    var list = await repo.LoadAsync();
     try
     {
         list.ChangeDueDate(id, dueDate, dueTime);
+        await repo.SaveAsync(list);
         return Results.NoContent();
     }
     catch (ArgumentException ex)
@@ -99,26 +127,17 @@ app.MapPatch("/tasks/{id}/due-date", (Guid id, ChangeDueDateRequest request, IVa
     }
 });
 
-app.MapPatch("/tasks/{id}/title", (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator) =>
+app.MapDelete("/tasks/{id}", async (Guid id, TodoListRepository repo) =>
 {
-    var result = validator.Validate(request);
-    if (!result.IsValid)
-    {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
-    }
-    try
-    {
-        list.EditTitle(id, request.Title);
-        return Results.NoContent();
-    }
-    catch (ArgumentException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
+    var list = await repo.LoadAsync();
+    list.DeleteTask(id);
+    await repo.SaveAsync(list);
+    return Results.NoContent();
 });
 
 app.Run();
+
 public record CreateTaskRequest(string Title);
-public record ChangePriorityRequest(string Priority);
-public record ChangeDueDateRequest(string? DueDate, String? DueTime);
 public record EditTitleRequest(string Title);
+public record ChangePriorityRequest(string Priority);
+public record ChangeDueDateRequest(string? DueDate, string? DueTime);

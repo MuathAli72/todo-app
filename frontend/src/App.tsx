@@ -14,6 +14,7 @@ const TaskSchema = z.object({
 type Task = z.infer<typeof TaskSchema>
 
 const DateInputSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const TitleInputSchema = z.string().trim().min(1, 'Please enter a title.')
 
 function nextDateFor(time: string): string {
   const [hours, minutes] = time.split(':').map(Number)
@@ -66,6 +67,12 @@ function App() {
   }, [])
 
   function saveTitle(task: Task) {
+    const check = TitleInputSchema.safeParse(editingTitle)
+    if (!check.success) {
+      setEditingTaskId(null)
+      alert(check.error.issues[0].message)
+      return
+    }
     fetch(`http://localhost:5149/tasks/${task.id}/title`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -270,6 +277,11 @@ function App() {
           placeholder="Add a task..."
         />
         <button onClick={() => {
+          const check = TitleInputSchema.safeParse(newTitle)
+          if (!check.success) {
+            alert(check.error.issues[0].message)
+            return
+          }
           fetch('http://localhost:5149/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

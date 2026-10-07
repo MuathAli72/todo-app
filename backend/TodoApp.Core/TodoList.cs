@@ -4,6 +4,15 @@ public class TodoList
 {
     private List<TodoItem> tasks = new();
 
+    public TodoList()
+    {
+    }
+
+    public TodoList(IEnumerable<TodoItem> existingTasks)
+    {
+        tasks = existingTasks.ToList();
+    }
+
     public TodoItem AddTask(string title)
     {
         var task = new TodoItem(title);
@@ -53,7 +62,6 @@ public class TodoList
         if (task != null)
         {
             task.ChangeDueDate(newDate, newTime);
-            
         }
     }
 
