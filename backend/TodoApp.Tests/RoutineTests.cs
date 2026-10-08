@@ -143,4 +143,48 @@ public class RoutineTests
         var nextMonday = new DateOnly(2026, 10, 12);
         Assert.DoesNotContain(new DateOnly(2026, 10, 5), gym.MissedDays(nextMonday));
     }
+
+    [Fact]
+    public void Editing_the_title()
+    {
+        var gym = Gym();
+        gym.EditTitle("Swim");
+        Assert.Equal("Swim", gym.Title);
+    }
+
+    [Fact]
+    public void Editing_the_title_to_empty_is_rejected()
+    {
+        var gym = Gym();
+        Assert.Throws<ArgumentException>(() => gym.EditTitle(""));
+        Assert.Equal("Gym", gym.Title);
+    }
+
+    [Fact]
+    public void Changing_days_keeps_old_completions()
+    {
+        var gym = Gym();
+        var monday = new DateOnly(2026, 10, 5);
+        var wednesday = new DateOnly(2026, 10, 7);
+        gym.Tick(monday, wednesday);
+        gym.ChangeDays(new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday }, wednesday);
+        Assert.True(gym.IsDoneOn(monday));
+    }
+
+    [Fact]
+    public void Changing_days_does_not_make_past_days_missed()
+    {
+        var gym = Gym();
+        var wednesday = new DateOnly(2026, 10, 7);
+        gym.ChangeDays(new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday }, wednesday);
+        Assert.DoesNotContain(new DateOnly(2026, 10, 6), gym.MissedDays(wednesday));
+    }
+
+    [Fact]
+    public void Changing_to_no_days_is_rejected()
+    {
+        var gym = Gym();
+        Assert.Throws<ArgumentException>(() => gym.ChangeDays(new DayOfWeek[0], new DateOnly(2026, 10, 7)));
+        Assert.Equal(3, gym.Days.Count);
+    }
 }
