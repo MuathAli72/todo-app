@@ -21,6 +21,40 @@ namespace TodoApp.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TodoApp.Core.Routine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("CreatedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("ScheduleStartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly?>("Time")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("days")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Days");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Routines", t =>
+                        {
+                            t.HasCheckConstraint("CK_Routines_HasDays", "\"Days\" <> ''");
+
+                            t.HasCheckConstraint("CK_Routines_TitleNotBlank", "length(trim(\"Title\")) > 0");
+                        });
+                });
+
             modelBuilder.Entity("TodoApp.Core.TodoItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -56,6 +90,36 @@ namespace TodoApp.Api.Migrations
 
                             t.HasCheckConstraint("CK_Tasks_TitleNotBlank", "length(trim(\"Title\")) > 0");
                         });
+                });
+
+            modelBuilder.Entity("TodoApp.Core.Routine", b =>
+                {
+                    b.OwnsMany("TodoApp.Core.Completion", "Completions", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTime>("CompletedAt")
+                                .HasColumnType("timestamp with time zone");
+
+                            b1.Property<DateOnly>("Date")
+                                .HasColumnType("date");
+
+                            b1.Property<Guid>("RoutineId")
+                                .HasColumnType("uuid");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("RoutineId", "Date")
+                                .IsUnique();
+
+                            b1.ToTable("Completions", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("RoutineId");
+                        });
+
+                    b.Navigation("Completions");
                 });
 #pragma warning restore 612, 618
         }

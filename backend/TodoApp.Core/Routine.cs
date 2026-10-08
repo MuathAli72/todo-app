@@ -12,6 +12,10 @@ public class Routine
     public DateOnly CreatedOn { get; private set; }
     public DateOnly ScheduleStartsOn { get; private set; }
     public IReadOnlyList<Completion> Completions => completions.AsReadOnly();
+    private Routine()
+    {
+        Title = "";
+    }
 
     public Routine(string title, IEnumerable<DayOfWeek> days, TimeOnly? time, DateOnly createdOn)
     {
