@@ -70,10 +70,12 @@ function App() {
   const [repeat, setRepeat] = useState(false)
   const [newDays, setNewDays] = useState<string[]>([])
   const [newTime, setNewTime] = useState('')
+
   const visibleRoutines = routines.filter(r =>
     showAll || r.isToday || r.missedDays.length > 0
   )
-    function toggleDay(day: string) {
+
+  function toggleDay(day: string) {
     if (newDays.includes(day)) {
       setNewDays(newDays.filter(d => d !== day))
     } else {
@@ -198,7 +200,7 @@ function App() {
       })
   }
 
-    function toggleRoutineToday(routine: Routine) {
+  function toggleRoutineToday(routine: Routine) {
     const today = formatDate(new Date())
 
     const request = routine.isDoneToday
@@ -246,8 +248,66 @@ function App() {
       .catch(err => alert(err.message))
   }
 
+  function addTask() {
+    const check = TitleInputSchema.safeParse(newTitle)
+    if (!check.success) {
+      alert(check.error.issues[0].message)
+      return
+    }
+    fetch('http://localhost:5149/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle })
+    })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
+        return response.json()
+      })
+      .then(newTask => {
+        setTasks([...tasks, newTask])
+        setNewTitle('')
+      })
+      .catch(err => {
+        alert(err.message)
+      })
+  }
 
-
+  function addRoutine() {
+    const check = TitleInputSchema.safeParse(newTitle)
+    if (!check.success) {
+      alert(check.error.issues[0].message)
+      return
+    }
+    if (newDays.length === 0) {
+      alert('Pick at least one day.')
+      return
+    }
+    fetch('http://localhost:5149/routines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle, days: newDays, time: newTime || null })
+    })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
+        return response.json()
+      })
+      .then(data => {
+        const result = RoutineSchema.safeParse(data)
+        if (!result.success) {
+          throw new Error('The server sent the routine in an unexpected shape.')
+        }
+        setRoutines([...routines, result.data])
+        setNewTitle('')
+        setNewDays([])
+        setNewTime('')
+        setRepeat(false)
+      })
+      .catch(err => alert(err.message))
+  }
 
   function deleteTask(task: Task) {
     fetch(`http://localhost:5149/tasks/${task.id}`, {
@@ -425,7 +485,7 @@ function App() {
         ))}
       </ul>
 
-            <div className="add-row">
+      <div className="add-row">
         <input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
@@ -437,31 +497,7 @@ function App() {
         >
           Repeat
         </button>
-        <button onClick={() => {
-          const check = TitleInputSchema.safeParse(newTitle)
-          if (!check.success) {
-            alert(check.error.issues[0].message)
-            return
-          }
-          fetch('http://localhost:5149/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: newTitle })
-          })
-            .then(response => {
-              if (!response.ok) {
-                return response.json().then(err => { throw new Error(err.error) })
-              }
-              return response.json()
-            })
-            .then(newTask => {
-              setTasks([...tasks, newTask])
-              setNewTitle('')
-            })
-            .catch(err => {
-              alert(err.message)
-            })
-        }}>
+        <button onClick={() => (repeat ? addRoutine() : addTask())}>
           Add
         </button>
       </div>
