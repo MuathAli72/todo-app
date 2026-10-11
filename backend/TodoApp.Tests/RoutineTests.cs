@@ -187,4 +187,31 @@ public class RoutineTests
         Assert.Throws<ArgumentException>(() => gym.ChangeDays(new DayOfWeek[0], new DateOnly(2026, 10, 7)));
         Assert.Equal(3, gym.Days.Count);
     }
+
+    [Fact]
+    public void Ticking_a_day_older_than_the_window_is_rejected()
+    {
+        // Given gym (Mon/Wed/Fri), and today is Monday Oct 12
+        var gym = Gym();
+        var today = new DateOnly(2026, 10, 12);
+
+        
+        
+        Assert.Throws<ArgumentException>(() => gym.Tick(new DateOnly(2026, 10, 5), today));
+        Assert.Empty(gym.Completions);
+    }
+
+    [Fact]
+    public void Ticking_a_day_six_days_ago_still_works()
+    {
+        
+        var gym = Gym();
+        var today = new DateOnly(2026, 10, 11);
+
+        
+        gym.Tick(new DateOnly(2026, 10, 5), today);
+
+        
+        Assert.True(gym.IsDoneOn(new DateOnly(2026, 10, 5)));
+    }
 }

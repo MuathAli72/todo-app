@@ -2,6 +2,8 @@
 
 public class Routine
 {
+    private const int LateWindowDays = 6;
+
     private List<DayOfWeek> days = new();
     private List<Completion> completions = new();
 
@@ -12,6 +14,7 @@ public class Routine
     public DateOnly CreatedOn { get; private set; }
     public DateOnly ScheduleStartsOn { get; private set; }
     public IReadOnlyList<Completion> Completions => completions.AsReadOnly();
+
     private Routine()
     {
         Title = "";
@@ -21,7 +24,6 @@ public class Routine
     {
         CheckTitle(title);
         var dayList = CheckDays(days);
-
         Title = title;
         this.days = dayList;
         Time = time;
@@ -30,9 +32,7 @@ public class Routine
     }
 
     public bool IsScheduledOn(DateOnly date) => days.Contains(date.DayOfWeek);
-
     public bool ExistedOn(DateOnly date) => date >= ScheduleStartsOn;
-
     public bool IsDoneOn(DateOnly date) => completions.Any(c => c.Date == date);
 
     public void EditTitle(string newTitle)
@@ -66,11 +66,14 @@ public class Routine
         {
             throw new ArgumentException($"{Title} didn't exist yet on that day.");
         }
+        if (date < today.AddDays(-LateWindowDays))
+        {
+            throw new ArgumentException("That day is too long ago to tick.");
+        }
         if (IsDoneOn(date))
         {
             return;
         }
-
         completions.Add(new Completion(date));
     }
 
@@ -82,18 +85,23 @@ public class Routine
     public List<DateOnly> MissedDays(DateOnly today)
     {
         var missed = new List<DateOnly>();
-
-        for (int i = 1; i <= 6; i++)
+        for (int i = 1; i <= LateWindowDays; i++)
         {
             var day = today.AddDays(-i);
-
-            if (!IsScheduledOn(day)) continue;
-            if (!ExistedOn(day)) continue;
-            if (IsDoneOn(day)) continue;
-
+            if (!IsScheduledOn(day))
+            {
+                continue;
+            }
+            if (!ExistedOn(day))
+            {
+                continue;
+            }
+            if (IsDoneOn(day))
+            {
+                continue;
+            }
             missed.Add(day);
         }
-
         return missed;
     }
 
