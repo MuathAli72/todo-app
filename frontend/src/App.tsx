@@ -13,6 +13,18 @@ const TaskSchema = z.object({
 
 type Task = z.infer<typeof TaskSchema>
 
+const RoutineSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  days: z.array(z.string()),
+  time: z.string().nullable(),
+  isToday: z.boolean(),
+  isDoneToday: z.boolean(),
+  missedDays: z.array(z.string()),
+})
+
+type Routine = z.infer<typeof RoutineSchema>
+
 const DateInputSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const TitleInputSchema = z.string().trim().min(1, 'Please enter a title.')
 
@@ -39,6 +51,31 @@ function App() {
   const [editingTitle, setEditingTitle] = useState('')
   const priorityNames = ['low', 'medium', 'high']
   const priorityClasses = ['priority-low', 'priority-medium', 'priority-high']
+
+  const [routines, setRoutines] = useState<Routine[]>([])
+  const [showAll, setShowAll] = useState(false)
+
+  const visibleRoutines = routines.filter(r =>
+    showAll || r.isToday || r.missedDays.length > 0
+  )
+
+  useEffect(() => {
+    fetch('http://localhost:5149/routines')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error()
+        }
+        return response.json()
+      })
+      .then(data => {
+        const result = z.array(RoutineSchema).safeParse(data)
+        if (!result.success) {
+          throw new Error()
+        }
+        setRoutines(result.data)
+      })
+      .catch(() => alert('Could not load routines.'))
+  }, [])
 
   useEffect(() => {
     fetch('http://localhost:5149/tasks')
@@ -179,6 +216,34 @@ function App() {
   return (
     <div className="app">
       <h1>My Todo App</h1>
+
+      <section className="routines">
+        <div className="routines-header">
+          <h2>Routines</h2>
+          <button onClick={() => setShowAll(!showAll)}>
+            {showAll ? 'Show today' : 'Show all'}
+          </button>
+        </div>
+
+        {visibleRoutines.length === 0 && (
+          <p className="routines-empty">No routines today.</p>
+        )}
+
+        <ul className="task-list">
+          {visibleRoutines.map(routine => (
+            <li key={routine.id} className="task">
+              <div className="task-row">
+                <span className="task-title">{routine.title}</span>
+                {routine.time && (
+                  <span className="task-due">{routine.time.slice(0, 5)}</span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <h2>Tasks</h2>
       <ul className="task-list">
         {tasks.map(task => (
           <li key={task.id} className={`task ${priorityClasses[task.priority]}`}>
