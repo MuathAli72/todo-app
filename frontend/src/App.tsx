@@ -44,6 +44,30 @@ function dayLabel(date: string): string {
   })
 }
 
+function toggleInList(list: string[], item: string): string[] {
+  if (list.includes(item)) {
+    return list.filter(x => x !== item)
+  }
+  return [...list, item]
+}
+
+function fetchRoutines(): Promise<Routine[]> {
+  return fetch('http://localhost:5149/routines')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error()
+      }
+      return response.json()
+    })
+    .then(data => {
+      const result = z.array(RoutineSchema).safeParse(data)
+      if (!result.success) {
+        throw new Error()
+      }
+      return result.data
+    })
+}
+
 function nextDateFor(time: string): string {
   const [hours, minutes] = time.split(':').map(Number)
   const target = new Date()
@@ -71,34 +95,18 @@ function App() {
   const [newDays, setNewDays] = useState<string[]>([])
   const [newTime, setNewTime] = useState('')
   const [notice, setNotice] = useState('')
+  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDays, setEditDays] = useState<string[]>([])
+  const [editTime, setEditTime] = useState('')
 
   const visibleRoutines = routines.filter(r =>
     showAll || r.isToday || r.missedDays.length > 0
   )
 
-  function toggleDay(day: string) {
-    if (newDays.includes(day)) {
-      setNewDays(newDays.filter(d => d !== day))
-    } else {
-      setNewDays([...newDays, day])
-    }
-  }
-
   useEffect(() => {
-    fetch('http://localhost:5149/routines')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error()
-        }
-        return response.json()
-      })
-      .then(data => {
-        const result = z.array(RoutineSchema).safeParse(data)
-        if (!result.success) {
-          throw new Error()
-        }
-        setRoutines(result.data)
-      })
+    fetchRoutines()
+      .then(setRoutines)
       .catch(() => alert('Could not load routines.'))
   }, [])
 
@@ -325,6 +333,77 @@ function App() {
       .catch(err => alert(err.message))
   }
 
+  function startEditRoutine(routine: Routine) {
+    setEditingRoutineId(routine.id)
+    setEditTitle(routine.title)
+    setEditDays(routine.days)
+    setEditTime(routine.time ? routine.time.slice(0, 5) : '')
+  }
+
+  function saveRoutine(routine: Routine) {
+    const check = TitleInputSchema.safeParse(editTitle)
+    if (!check.success) {
+      alert(check.error.issues[0].message)
+      return
+    }
+    if (editDays.length === 0) {
+      alert('Pick at least one day.')
+      return
+    }
+
+    const url = `http://localhost:5149/routines/${routine.id}`
+    const headers = { 'Content-Type': 'application/json' }
+    const requests: Promise<Response>[] = []
+
+    if (editTitle !== routine.title) {
+      requests.push(fetch(`${url}/title`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ title: editTitle })
+      }))
+    }
+
+    const daysChanged =
+      editDays.length !== routine.days.length ||
+      editDays.some(d => !routine.days.includes(d))
+    if (daysChanged) {
+      requests.push(fetch(`${url}/days`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ days: editDays })
+      }))
+    }
+
+    const currentTime = routine.time ? routine.time.slice(0, 5) : ''
+    if (editTime !== currentTime) {
+      requests.push(fetch(`${url}/time`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ time: editTime || null })
+      }))
+    }
+
+    if (requests.length === 0) {
+      setEditingRoutineId(null)
+      return
+    }
+
+    Promise.all(requests)
+      .then(responses => {
+        const failed = responses.find(r => !r.ok)
+        if (failed) {
+          return failed.json().then(err => { throw new Error(err.error) })
+        }
+        setEditingRoutineId(null)
+      })
+      .catch(err => alert(err.message))
+      .finally(() => {
+        fetchRoutines()
+          .then(setRoutines)
+          .catch(() => alert('Could not load routines.'))
+      })
+  }
+
   function deleteRoutine(routine: Routine) {
     if (!window.confirm(`Delete ${routine.title}? This also deletes its history.`)) {
       return
@@ -397,29 +476,62 @@ function App() {
         <ul className="task-list">
           {visibleRoutines.map(routine => (
             <li key={routine.id} className="task">
-              <div className="task-row">
-                {routine.isToday && (
+              {editingRoutineId === routine.id ? (
+                <div className="routine-edit">
                   <input
-                    type="checkbox"
-                    checked={routine.isDoneToday}
-                    onChange={() => toggleRoutineToday(routine)}
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    autoFocus
                   />
-                )}
-                <span className="task-title">{routine.title}</span>
-                {routine.time && (
-                  <span className="task-due">{routine.time.slice(0, 5)}</span>
-                )}
-                <button onClick={() => deleteRoutine(routine)}>Delete</button>
-              </div>
-              {routine.missedDays.length > 0 && (
-                <div className="missed-days">
-                  Missed:
-                  {routine.missedDays.map(date => (
-                    <button key={date} onClick={() => tickMissedDay(routine, date)}>
-                      {dayLabel(date)}
-                    </button>
-                  ))}
+                  <div className="repeat-options">
+                    {dayNames.map(day => (
+                      <button
+                        key={day}
+                        className={editDays.includes(day) ? 'day-button selected' : 'day-button'}
+                        onClick={() => setEditDays(toggleInList(editDays, day))}
+                      >
+                        {day.slice(0, 3)}
+                      </button>
+                    ))}
+                    <input
+                      type="time"
+                      value={editTime}
+                      onChange={e => setEditTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="routine-edit-actions">
+                    <button onClick={() => saveRoutine(routine)}>Save</button>
+                    <button onClick={() => setEditingRoutineId(null)}>Cancel</button>
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <div className="task-row">
+                    {routine.isToday && (
+                      <input
+                        type="checkbox"
+                        checked={routine.isDoneToday}
+                        onChange={() => toggleRoutineToday(routine)}
+                      />
+                    )}
+                    <span className="task-title">{routine.title}</span>
+                    {routine.time && (
+                      <span className="task-due">{routine.time.slice(0, 5)}</span>
+                    )}
+                    <button onClick={() => startEditRoutine(routine)}>Edit</button>
+                    <button onClick={() => deleteRoutine(routine)}>Delete</button>
+                  </div>
+                  {routine.missedDays.length > 0 && (
+                    <div className="missed-days">
+                      Missed:
+                      {routine.missedDays.map(date => (
+                        <button key={date} onClick={() => tickMissedDay(routine, date)}>
+                          {dayLabel(date)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </li>
           ))}
@@ -541,7 +653,7 @@ function App() {
             <button
               key={day}
               className={newDays.includes(day) ? 'day-button selected' : 'day-button'}
-              onClick={() => toggleDay(day)}
+              onClick={() => setNewDays(toggleInList(newDays, day))}
             >
               {day.slice(0, 3)}
             </button>
