@@ -28,6 +28,20 @@ type Routine = z.infer<typeof RoutineSchema>
 const DateInputSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const TitleInputSchema = z.string().trim().min(1, 'Please enter a title.')
 
+function formatDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function dayLabel(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short'
+  })
+}
+
 function nextDateFor(time: string): string {
   const [hours, minutes] = time.split(':').map(Number)
   const target = new Date()
@@ -37,10 +51,7 @@ function nextDateFor(time: string): string {
     target.setDate(target.getDate() + 1)
   }
 
-  const year = target.getFullYear()
-  const month = String(target.getMonth() + 1).padStart(2, '0')
-  const day = String(target.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return formatDate(target)
 }
 
 function App() {
@@ -176,6 +187,53 @@ function App() {
       })
   }
 
+    function toggleRoutineToday(routine: Routine) {
+    const today = formatDate(new Date())
+
+    const request = routine.isDoneToday
+      ? fetch(`http://localhost:5149/routines/${routine.id}/completions/${today}`, {
+          method: 'DELETE'
+        })
+      : fetch(`http://localhost:5149/routines/${routine.id}/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: today })
+        })
+
+    request
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
+        setRoutines(routines.map(r => {
+          if (r.id === routine.id) {
+            return { ...r, isDoneToday: !r.isDoneToday }
+          }
+          return r
+        }))
+      })
+      .catch(err => alert(err.message))
+  }
+
+  function tickMissedDay(routine: Routine, date: string) {
+    fetch(`http://localhost:5149/routines/${routine.id}/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: date })
+    })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
+        setRoutines(routines.map(r => {
+          if (r.id === routine.id) {
+            return { ...r, missedDays: r.missedDays.filter(d => d !== date) }
+          }
+          return r
+        }))
+      })
+      .catch(err => alert(err.message))
+  }
   function deleteTask(task: Task) {
     fetch(`http://localhost:5149/tasks/${task.id}`, {
       method: 'DELETE'
@@ -233,11 +291,28 @@ function App() {
           {visibleRoutines.map(routine => (
             <li key={routine.id} className="task">
               <div className="task-row">
+                {routine.isToday && (
+                  <input
+                    type="checkbox"
+                    checked={routine.isDoneToday}
+                    onChange={() => toggleRoutineToday(routine)}
+                  />
+                )}
                 <span className="task-title">{routine.title}</span>
                 {routine.time && (
                   <span className="task-due">{routine.time.slice(0, 5)}</span>
                 )}
               </div>
+              {routine.missedDays.length > 0 && (
+                <div className="missed-days">
+                  Missed:
+                  {routine.missedDays.map(date => (
+                    <button key={date} onClick={() => tickMissedDay(routine, date)}>
+                      {dayLabel(date)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </li>
           ))}
         </ul>
