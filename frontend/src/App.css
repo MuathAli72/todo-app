@@ -143,3 +143,8 @@ h1 {
   gap: 6px;
   margin-top: 8px;
 }
+
+.notice {
+  margin-top: 8px;
+  color: #8fd19e;
+}

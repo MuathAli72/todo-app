@@ -70,6 +70,7 @@ function App() {
   const [repeat, setRepeat] = useState(false)
   const [newDays, setNewDays] = useState<string[]>([])
   const [newTime, setNewTime] = useState('')
+  const [notice, setNotice] = useState('')
 
   const visibleRoutines = routines.filter(r =>
     showAll || r.isToday || r.missedDays.length > 0
@@ -126,6 +127,14 @@ function App() {
       document.removeEventListener('click', handleClickOutside)
     }
   }, [])
+
+  useEffect(() => {
+    if (notice === '') {
+      return
+    }
+    const timer = setTimeout(() => setNotice(''), 4000)
+    return () => clearTimeout(timer)
+  }, [notice])
 
   function saveTitle(task: Task) {
     const check = TitleInputSchema.safeParse(editingTitle)
@@ -301,6 +310,13 @@ function App() {
           throw new Error('The server sent the routine in an unexpected shape.')
         }
         setRoutines([...routines, result.data])
+        if (!result.data.isToday) {
+          const days = dayNames
+            .filter(d => result.data.days.includes(d))
+            .map(d => d.slice(0, 3))
+            .join(', ')
+          setNotice(`${result.data.title} saved. It'll show on ${days}.`)
+        }
         setNewTitle('')
         setNewDays([])
         setNewTime('')
@@ -520,6 +536,8 @@ function App() {
           />
         </div>
       )}
+
+      {notice && <p className="notice">{notice}</p>}
     </div>
   )
 }
