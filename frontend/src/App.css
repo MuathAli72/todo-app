@@ -130,3 +130,16 @@ h1 {
 .priority-high {
   border-left: 4px solid #e05050;
 }
+
+.repeat-button.selected,
+.day-button.selected {
+  background: #646cff;
+  color: white;
+}
+
+.repeat-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}

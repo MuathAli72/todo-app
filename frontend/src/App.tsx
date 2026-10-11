@@ -25,6 +25,8 @@ const RoutineSchema = z.object({
 
 type Routine = z.infer<typeof RoutineSchema>
 
+const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
 const DateInputSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const TitleInputSchema = z.string().trim().min(1, 'Please enter a title.')
 
@@ -65,10 +67,19 @@ function App() {
 
   const [routines, setRoutines] = useState<Routine[]>([])
   const [showAll, setShowAll] = useState(false)
-
+  const [repeat, setRepeat] = useState(false)
+  const [newDays, setNewDays] = useState<string[]>([])
+  const [newTime, setNewTime] = useState('')
   const visibleRoutines = routines.filter(r =>
     showAll || r.isToday || r.missedDays.length > 0
   )
+    function toggleDay(day: string) {
+    if (newDays.includes(day)) {
+      setNewDays(newDays.filter(d => d !== day))
+    } else {
+      setNewDays([...newDays, day])
+    }
+  }
 
   useEffect(() => {
     fetch('http://localhost:5149/routines')
@@ -234,6 +245,10 @@ function App() {
       })
       .catch(err => alert(err.message))
   }
+
+
+
+
   function deleteTask(task: Task) {
     fetch(`http://localhost:5149/tasks/${task.id}`, {
       method: 'DELETE'
@@ -410,12 +425,18 @@ function App() {
         ))}
       </ul>
 
-      <div className="add-row">
+            <div className="add-row">
         <input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
-          placeholder="Add a task..."
+          placeholder={repeat ? 'Add a routine...' : 'Add a task...'}
         />
+        <button
+          className={repeat ? 'repeat-button selected' : 'repeat-button'}
+          onClick={() => setRepeat(!repeat)}
+        >
+          Repeat
+        </button>
         <button onClick={() => {
           const check = TitleInputSchema.safeParse(newTitle)
           if (!check.success) {
@@ -444,6 +465,25 @@ function App() {
           Add
         </button>
       </div>
+
+      {repeat && (
+        <div className="repeat-options">
+          {dayNames.map(day => (
+            <button
+              key={day}
+              className={newDays.includes(day) ? 'day-button selected' : 'day-button'}
+              onClick={() => toggleDay(day)}
+            >
+              {day.slice(0, 3)}
+            </button>
+          ))}
+          <input
+            type="time"
+            value={newTime}
+            onChange={e => setNewTime(e.target.value)}
+          />
+        </div>
+      )}
     </div>
   )
 }
