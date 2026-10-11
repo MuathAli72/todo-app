@@ -100,6 +100,11 @@ function App() {
   const [editDays, setEditDays] = useState<string[]>([])
   const [editTime, setEditTime] = useState('')
 
+  const todayName = dayNames[new Date().getDay()]
+  const todayHeading = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long'
+  })
+
   const visibleRoutines = routines.filter(r =>
     showAll || r.isToday || r.missedDays.length > 0
   )
@@ -459,12 +464,12 @@ function App() {
 
   return (
     <div className="app">
-      <h1>My Todo App</h1>
+      <h1>{todayHeading}</h1>
 
       <section className="routines">
         <div className="routines-header">
           <h2>Routines</h2>
-          <button onClick={() => setShowAll(!showAll)}>
+          <button className="quiet" onClick={() => setShowAll(!showAll)}>
             {showAll ? 'Show today' : 'Show all'}
           </button>
         </div>
@@ -500,26 +505,43 @@ function App() {
                     />
                   </div>
                   <div className="routine-edit-actions">
-                    <button onClick={() => saveRoutine(routine)}>Save</button>
+                    <button className="primary" onClick={() => saveRoutine(routine)}>Save</button>
                     <button onClick={() => setEditingRoutineId(null)}>Cancel</button>
                   </div>
                 </div>
               ) : (
                 <>
                   <div className="task-row">
-                    {routine.isToday && (
+                    {routine.isToday ? (
                       <input
                         type="checkbox"
                         checked={routine.isDoneToday}
                         onChange={() => toggleRoutineToday(routine)}
                       />
+                    ) : (
+                      <span className="checkbox-spacer" aria-hidden="true" />
                     )}
                     <span className="task-title">{routine.title}</span>
                     {routine.time && (
                       <span className="task-due">{routine.time.slice(0, 5)}</span>
                     )}
+                    <span className="week-strip" aria-label={`Repeats on ${routine.days.join(', ')}`}>
+                      {dayNames.map(day => (
+                        <span
+                          key={day}
+                          className={[
+                            'week-day',
+                            routine.days.includes(day) ? 'on' : '',
+                                                      day === todayName ? 'today' : '',
+                            day === todayName && routine.isDoneToday ? 'done' : ''
+                          ].join(' ')}
+                        >
+                          {day[0]}
+                        </span>
+                      ))}
+                    </span>
                     <button onClick={() => startEditRoutine(routine)}>Edit</button>
-                    <button onClick={() => deleteRoutine(routine)}>Delete</button>
+                    <button className="danger" onClick={() => deleteRoutine(routine)}>Delete</button>
                   </div>
                   {routine.missedDays.length > 0 && (
                     <div className="missed-days">
@@ -541,7 +563,10 @@ function App() {
       <h2>Tasks</h2>
       <ul className="task-list">
         {tasks.map(task => (
-          <li key={task.id} className={`task ${priorityClasses[task.priority]}`}>
+                    <li
+            key={task.id}
+            className={`task ${priorityClasses[task.priority]} ${task.isDone ? 'is-done' : ''}`}
+          >
             <div className="task-row">
               <input
                 type="checkbox"
@@ -571,7 +596,7 @@ function App() {
                   due {task.dueDate}{task.dueTime && ` ${task.dueTime.slice(0, 5)}`}
                 </span>
               )}
-              <button onClick={() => deleteTask(task)}>Delete</button>
+              <button className="danger" onClick={() => deleteTask(task)}>Delete</button>
               <button onClick={e => {
                 e.stopPropagation()
                 setExpandedTaskId(expandedTaskId === task.id ? null : task.id)
@@ -642,7 +667,7 @@ function App() {
         >
           Repeat
         </button>
-        <button onClick={() => (repeat ? addRoutine() : addTask())}>
+        <button className="primary" onClick={() => (repeat ? addRoutine() : addTask())}>
           Add
         </button>
       </div>
@@ -666,7 +691,7 @@ function App() {
         </div>
       )}
 
-      {notice && <p className="notice">{notice}</p>}
+      {notice && <p className="notice" role="status">{notice}</p>}
     </div>
   )
 }

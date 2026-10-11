@@ -1,94 +1,336 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+
+/* Warm neutral UI. Color is only used when it means something:
+   green = done / low, yellow = medium / missed, red = high / delete. */
+:root {
+  color-scheme: dark;
+  --bg: #201d1a;
+  --surface: #2a2622;
+  --surface-hover: #36312b;
+  --line: #3f3933;
+  --text: #f1ebe2;
+  --muted: #a89f93;
+  --faint: #5e564d;
+  --done: #6fcf7f;
+  --warn: #f2c14e;
+  --danger: #ef6b5b;
+  --low: #6fcf7f;
+  --medium: #f2c14e;
+  --high: #ef6b5b;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
-  background: radial-gradient(circle at top, #242424 0%, #141414 60%);
-  color: #e8e8e8;
-  font-family: system-ui, sans-serif;
   margin: 0;
+  display: block;
   min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Undo Vite's starter styles, in case index.css still has them */
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
 }
 
 .app {
-  max-width: 600px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 3rem 1rem 4rem;
 }
 
 h1 {
-  text-align: center;
-  font-size: 1.8rem;
-  margin-bottom: 1.5rem;
+  font-size: 2.25rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 2.5rem;
 }
+
+h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+/* ---------- Buttons: three levels ---------- */
+
+button {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--surface-hover);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--line);
+  border-color: transparent;
+}
+
+:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+button.primary {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+button.primary:hover {
+  background: #ffffff;
+}
+
+button.danger {
+  background: transparent;
+  color: var(--muted);
+}
+
+button.danger:hover {
+  background: transparent;
+  color: var(--danger);
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--muted);
+  padding: 0.25rem 0.5rem;
+}
+
+button.quiet:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+/* ---------- Inputs ---------- */
+
+input:not([type]),
+input[type="time"],
+input[type="date"],
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+}
+
+input[type="time"],
+input[type="date"] {
+  color-scheme: dark;
+}
+
+/* Round checkboxes. Ticked = green, because green means done. */
+input[type="checkbox"] {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+}
+
+input[type="checkbox"]:checked {
+  background: var(--done);
+  border-color: var(--done);
+}
+
+input[type="checkbox"]:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+/* ---------- Lists: one panel per section, rows split by lines ---------- */
 
 .task-list {
   list-style: none;
+  margin: 0 0 2.5rem;
   padding: 0;
-  margin: 0 0 1.5rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.task-list:empty {
+  display: none;
 }
 
 .task {
-  background: #262626;
-  border-radius: 8px;
   padding: 0.75rem 1rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid var(--line);
+}
+
+.task:last-child {
+  border-bottom: none;
 }
 
 .task-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 
 .task-title {
   flex: 1;
-  font-size: 1rem;
+  min-width: 8rem;
+}
+
+.checkbox-spacer {
+  width: 20px;
+  flex-shrink: 0;
 }
 
 .task-title.done {
+  color: var(--muted);
+}
 
-  color: #888;
+.task-row > input:not([type]) {
+  flex: 1;
+  min-width: 8rem;
 }
 
 .task-due {
-  font-size: 0.8rem;
-  color: #aaa;
-}
-
-.task button {
-  background: #3a3a3a;
-  color: #e8e8e8;
-  border: none;
-  border-radius: 6px;
-  padding: 0.4rem 0.7rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.task button:hover {
-  background: #4a4a4a;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .task-options {
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #3a3a3a;
+  border-top: 1px dashed var(--line);
 }
 
-.task-options select,
-.task-options input {
-  background: #1a1a1a;
-  color: #e8e8e8;
-  border: 1px solid #3a3a3a;
-  border-radius: 6px;
-  padding: 0.4rem;
+/* ---------- Routines ---------- */
+
+.routines-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
 }
+
+.routines-header h2 {
+  margin: 0;
+}
+
+.routines-empty {
+  color: var(--muted);
+  margin: 0 0 2.5rem;
+}
+
+/* The week strip. Picked days are shaded, today stands out,
+   and today turns green once it's ticked. */
+.week-strip {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.week-day {
+  width: 1.5rem;
+  line-height: 1.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  color: var(--faint);
+}
+
+.week-day.on {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.week-day.today {
+  box-shadow: inset 0 0 0 1px var(--faint);
+}
+
+.week-day.on.today {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 700;
+  box-shadow: 0 0 0 3px rgba(241, 235, 226, 0.15);
+}
+
+.week-day.on.today.done {
+  background: var(--done);
+  box-shadow: 0 0 0 3px rgba(111, 207, 127, 0.2);
+}
+
+.missed-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  padding-left: calc(20px + 0.75rem);
+  font-size: 0.8125rem;
+  color: var(--warn);
+}
+
+.missed-days button {
+  background: transparent;
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  color: var(--warn);
+  font-size: 0.8125rem;
+  padding: 0.1rem 0.6rem;
+}
+
+.missed-days button:hover {
+  background: var(--warn);
+  color: var(--bg);
+}
+
+.routine-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.routine-edit .repeat-options {
+  margin-top: 0;
+}
+
+.routine-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ---------- Add box ---------- */
 
 .add-row {
   display: flex;
@@ -97,65 +339,111 @@ h1 {
 
 .add-row input {
   flex: 1;
-  background: #262626;
-  color: #e8e8e8;
-  border: 1px solid #3a3a3a;
-  border-radius: 6px;
-  padding: 0.6rem;
-  font-size: 1rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  background: var(--surface);
 }
 
 .add-row button {
-  background: #4a7fd6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.6rem 1.2rem;
-  font-size: 1rem;
-  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-size: 0.9375rem;
 }
 
-.add-row button:hover {
-  background: #3a6fc6;
-}
-
-.priority-low {
-  border-left: 4px solid #4caf50;
-}
-
-.priority-medium {
-  border-left: 4px solid #e0b000;
-}
-
-.priority-high {
-  border-left: 4px solid #e05050;
-}
-
-.repeat-button.selected,
-.day-button.selected {
-  background: #646cff;
-  color: white;
+.repeat-button.selected {
+  background: transparent;
+  border-color: var(--text);
 }
 
 .repeat-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.day-button {
+  min-width: 3rem;
+}
+
+.day-button.selected {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 700;
 }
 
 .notice {
-  margin-top: 8px;
-  color: #8fd19e;
+  margin: 0.75rem 0 0;
+  color: var(--done);
 }
 
-.routine-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ---------- Small screens ---------- */
+
+@media (max-width: 520px) {
+  .app {
+    padding-top: 2rem;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+    margin-bottom: 2rem;
+  }
+
+  .task-title {
+    flex-basis: calc(100% - 20px - 0.75rem);
+  }
+
+  .task-row {
+    gap: 0.5rem 0.6rem;
+  }
+
+  .task button {
+    font-size: 0.8125rem;
+    padding: 0.3rem 0.55rem;
+  }
+
+  .week-strip {
+    gap: 2px;
+  }
+
+  .week-day {
+    width: 1.15rem;
+  }
+
+  .add-row {
+    flex-wrap: wrap;
+  }
+
+  .add-row input {
+    flex-basis: 100%;
+  }
 }
 
-.routine-edit-actions {
-  display: flex;
-  gap: 6px;
+/* ---------- Priority colors ---------- */
+
+.priority-low {
+  --prio: var(--low);
+  --prio-tint: rgba(111, 207, 127, 0.14);
+}
+
+.priority-medium {
+  --prio: var(--medium);
+  --prio-tint: rgba(242, 193, 78, 0.14);
+}
+
+.priority-high {
+  --prio: var(--high);
+  --prio-tint: rgba(239, 107, 91, 0.14);
+}
+
+/* Priority as a colored edge that fades across the row */
+.task[class*="priority-"] {
+  background: linear-gradient(90deg, var(--prio-tint), transparent 60%);
+  box-shadow: inset 4px 0 0 var(--prio);
+}
+
+/* Done tasks fade back: keep a thin edge, drop the tint */
+.task.is-done {
+  background: none;
+  box-shadow: inset 4px 0 0 var(--faint);
 }
