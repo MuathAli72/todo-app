@@ -325,6 +325,22 @@ function App() {
       .catch(err => alert(err.message))
   }
 
+  function deleteRoutine(routine: Routine) {
+    if (!window.confirm(`Delete ${routine.title}? This also deletes its history.`)) {
+      return
+    }
+    fetch(`http://localhost:5149/routines/${routine.id}`, {
+      method: 'DELETE'
+    })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
+        setRoutines(routines.filter(r => r.id !== routine.id))
+      })
+      .catch(err => alert(err.message))
+  }
+
   function deleteTask(task: Task) {
     fetch(`http://localhost:5149/tasks/${task.id}`, {
       method: 'DELETE'
@@ -393,6 +409,7 @@ function App() {
                 {routine.time && (
                   <span className="task-due">{routine.time.slice(0, 5)}</span>
                 )}
+                <button onClick={() => deleteRoutine(routine)}>Delete</button>
               </div>
               {routine.missedDays.length > 0 && (
                 <div className="missed-days">
