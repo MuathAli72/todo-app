@@ -287,8 +287,12 @@ function App() {
         }
         return response.json()
       })
-      .then(newTask => {
-        setTasks([...tasks, newTask])
+            .then(data => {
+        const result = TaskSchema.safeParse(data)
+        if (!result.success) {
+          throw new Error('The server sent the task in an unexpected shape.')
+        }
+        setTasks([...tasks, result.data])
         setNewTitle('')
       })
       .catch(err => {
