@@ -1,7 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
 
 /* Warm neutral UI. Color is only used when it means something:
-   green = done / low, yellow = medium / missed, red = high / delete. */
+   green = done / low, yellow = medium / missed, red = high / delete.
+   Two themes share the same variable names. "System" picks one of them in useTheme. */
+
+/* Dark (the default) */
 :root {
   color-scheme: dark;
   --bg: #201d1a;
@@ -17,6 +20,42 @@
   --low: #6fcf7f;
   --medium: #f2c14e;
   --high: #ef6b5b;
+  --primary: #f1ebe2;
+  --primary-ink: #201d1a;
+  --primary-hover: #ffffff;
+  --today-glow: rgba(241, 235, 226, 0.15);
+  --done-glow: rgba(111, 207, 127, 0.2);
+  --low-tint: rgba(111, 207, 127, 0.14);
+  --medium-tint: rgba(242, 193, 78, 0.14);
+  --high-tint: rgba(239, 107, 91, 0.14);
+  --panel-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Light: warm paper, dark ink, the same meaning colors made deeper so they read on white */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f3ee;
+  --surface: #ffffff;
+  --surface-hover: #eee8df;
+  --line: #e3ddd3;
+  --text: #27231f;
+  --muted: #6b6359;
+  --faint: #bdb4a8;
+  --done: #2e9b4e;
+  --warn: #9a6400;
+  --danger: #c4483b;
+  --low: #3fa65c;
+  --medium: #d9a21b;
+  --high: #d4553f;
+  --primary: #27231f;
+  --primary-ink: #f6f3ee;
+  --primary-hover: #000000;
+  --today-glow: rgba(39, 35, 31, 0.12);
+  --done-glow: rgba(46, 155, 78, 0.2);
+  --low-tint: rgba(63, 166, 92, 0.12);
+  --medium-tint: rgba(217, 162, 27, 0.14);
+  --high-tint: rgba(212, 85, 63, 0.12);
+  --panel-shadow: 0 8px 24px rgba(39, 35, 31, 0.12);
 }
 
 * {
@@ -91,13 +130,13 @@ button:focus:not(:focus-visible) {
 }
 
 button.primary {
-  background: var(--text);
-  color: var(--bg);
+  background: var(--primary);
+  color: var(--primary-ink);
   font-weight: 700;
 }
 
 button.primary:hover {
-  background: #ffffff;
+  background: var(--primary-hover);
 }
 
 button.danger {
@@ -133,11 +172,6 @@ select {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.45rem 0.6rem;
-}
-
-input[type="time"],
-input[type="date"] {
-  color-scheme: dark;
 }
 
 /* Round checkboxes. Ticked = green, because green means done. */
@@ -282,12 +316,12 @@ input[type="checkbox"]:checked::after {
   background: var(--text);
   color: var(--bg);
   font-weight: 700;
-  box-shadow: 0 0 0 3px rgba(241, 235, 226, 0.15);
+  box-shadow: 0 0 0 3px var(--today-glow);
 }
 
 .week-day.on.today.done {
   background: var(--done);
-  box-shadow: 0 0 0 3px rgba(111, 207, 127, 0.2);
+  box-shadow: 0 0 0 3px var(--done-glow);
 }
 
 .missed-days {
@@ -377,6 +411,64 @@ input[type="checkbox"]:checked::after {
   color: var(--done);
 }
 
+/* ---------- Header and settings ---------- */
+
+.app-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.app-header h1 {
+  margin: 0;
+}
+
+.settings {
+  position: relative;
+}
+
+.settings-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 10;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--panel-shadow);
+}
+
+.settings-label {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.segmented button {
+  flex: 1;
+  background: transparent;
+}
+
+.segmented button.selected {
+  background: var(--surface-hover);
+  font-weight: 700;
+}
+
 /* ---------- Small screens ---------- */
 
 @media (max-width: 520px) {
@@ -386,6 +478,9 @@ input[type="checkbox"]:checked::after {
 
   h1 {
     font-size: 1.75rem;
+  }
+
+  .app-header {
     margin-bottom: 2rem;
   }
 
@@ -423,17 +518,17 @@ input[type="checkbox"]:checked::after {
 
 .priority-low {
   --prio: var(--low);
-  --prio-tint: rgba(111, 207, 127, 0.14);
+  --prio-tint: var(--low-tint);
 }
 
 .priority-medium {
   --prio: var(--medium);
-  --prio-tint: rgba(242, 193, 78, 0.14);
+  --prio-tint: var(--medium-tint);
 }
 
 .priority-high {
   --prio: var(--high);
-  --prio-tint: rgba(239, 107, 91, 0.14);
+  --prio-tint: var(--high-tint);
 }
 
 /* Priority as a colored edge that fades across the row */
