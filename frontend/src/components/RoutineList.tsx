@@ -6,13 +6,24 @@ import { DayPicker } from './DayPicker'
 
 type Props = {
   routines: Routine[]
+  /** Ticks or unticks today. */
   onToggleToday: (routine: Routine) => void
+  /** Ticks a missed day late. date is "yyyy-MM-dd". */
   onTickMissedDay: (routine: Routine, date: string) => void
+  /** Saves an edit. Resolves to true when everything saved. */
   onUpdate: (routine: Routine, changes: RoutineChanges) => Promise<boolean>
+  /** Deletes a routine and its history. */
   onDelete: (routine: Routine) => void
 }
 
-// The Routines section. Holds only screen state: Show all, and the edit form.
+/**
+ * The Routines section.
+ *
+ * @remarks
+ * By default it only shows routines that matter today: on today, or with missed days.
+ * "Show all" lists every routine.
+ * It only holds screen state (Show all, and the edit form). The routines come from useRoutines.
+ */
 export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate, onDelete }: Props) {
   const [showAll, setShowAll] = useState(false)
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null)
@@ -22,17 +33,21 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
 
   const todayName = dayNames[new Date().getDay()]
 
+  // Worked out from routines on every render, not stored, so it can't get out of sync.
   const visibleRoutines = routines.filter(r =>
     showAll || r.isToday || r.missedDays.length > 0
   )
 
+  /** Opens the edit form, filled with the routine's current values. */
   function startEdit(routine: Routine) {
     setEditingRoutineId(routine.id)
     setEditTitle(routine.title)
     setEditDays(routine.days)
+    // The time input wants "HH:mm"; the server sends "HH:mm:ss".
     setEditTime(routine.time ? routine.time.slice(0, 5) : '')
   }
 
+  /** Checks the form, then saves. The form only closes if the save worked. */
   function saveEdit(routine: Routine) {
     const check = TitleInputSchema.safeParse(editTitle)
     if (!check.success) {
@@ -50,6 +65,13 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
     })
   }
 
+  /**
+   * Asks before deleting.
+   *
+   * @remarks
+   * Routines ask first because deleting one also deletes its tick history.
+   * Tasks don't ask: there's nothing extra to lose.
+   */
   function confirmDelete(routine: Routine) {
     if (window.confirm(`Delete ${routine.title}? This also deletes its history.`)) {
       onDelete(routine)
@@ -95,6 +117,7 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
             ) : (
               <>
                 <div className="task-row">
+                  {/* Only today can be ticked here. Other days get an empty space so the titles line up. */}
                   {routine.isToday ? (
                     <input
                       type="checkbox"
@@ -108,6 +131,7 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
                   {routine.time && (
                     <span className="task-due">{routine.time.slice(0, 5)}</span>
                   )}
+                  {/* The week strip: one letter per day. Its days are lit, today is marked. */}
                   <span className="week-strip" aria-label={`Repeats on ${routine.days.join(', ')}`}>
                     {dayNames.map(day => (
                       <span
@@ -126,6 +150,7 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
                   <button onClick={() => startEdit(routine)}>Edit</button>
                   <button className="danger" onClick={() => confirmDelete(routine)}>Delete</button>
                 </div>
+                {/* Missed days from the last 6 days. Clicking one ticks it late. */}
                 {routine.missedDays.length > 0 && (
                   <div className="missed-days">
                     Missed:

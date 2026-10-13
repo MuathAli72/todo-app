@@ -8,7 +8,13 @@ import { TaskList } from './components/TaskList'
 import { AddBox } from './components/AddBox'
 import { Settings } from './components/Settings'
 
-// App only connects things: the hooks hold the data, the components draw it.
+/**
+ * The whole page.
+ *
+ * @remarks
+ * App only connects things: the hooks hold the data, the components draw it.
+ * Each component gets the data it shows plus `onX` functions to call when the user does X.
+ */
 function App() {
   const { tasks, addTask, renameTask, toggleTask, changePriority, changeDueDate, deleteTask } = useTasks()
   const { routines, addRoutine, toggleToday, tickMissedDay, updateRoutine, deleteRoutine } = useRoutines()

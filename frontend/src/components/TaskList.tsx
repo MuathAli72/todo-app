@@ -2,23 +2,37 @@ import { useState, useEffect } from 'react'
 import { DateInputSchema, TitleInputSchema, type Task } from '../schemas'
 import { nextDateFor } from '../dates'
 
+/** The CSS class for each priority (position = Task.priority). It colors the row's left edge. */
 const priorityClasses = ['priority-low', 'priority-medium', 'priority-high']
 
 type Props = {
   tasks: Task[]
+  /** Renames a task. Resolves to true when it saved. */
   onRename: (task: Task, title: string) => Promise<boolean>
+  /** Ticks or unticks a task. */
   onToggle: (task: Task) => void
+  /** Changes the priority: 0 = low, 1 = medium, 2 = high. */
   onChangePriority: (task: Task, priority: number) => void
+  /** Sets the due date and time. null for both removes them. */
   onChangeDueDate: (task: Task, date: string | null, time: string | null) => void
+  /** Deletes a task. */
   onDelete: (task: Task) => void
 }
 
-// The Tasks section. Holds only screen state: what's open and what's being typed.
+/**
+ * The Tasks section.
+ *
+ * @remarks
+ * It only holds screen state: which task's options are open, and which title is being edited.
+ * The tasks themselves come from useTasks, through props.
+ */
 export function TaskList({ tasks, onRename, onToggle, onChangePriority, onChangeDueDate, onDelete }: Props) {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
 
+  // A click anywhere else on the page closes the options panel.
+  // The panel and its button call stopPropagation, so clicks on them don't count as "anywhere else".
   useEffect(() => {
     function handleClickOutside() {
       setExpandedTaskId(null)
@@ -26,11 +40,16 @@ export function TaskList({ tasks, onRename, onToggle, onChangePriority, onChange
 
     document.addEventListener('click', handleClickOutside)
 
+    // Remove the listener when the list goes away.
     return () => {
       document.removeEventListener('click', handleClickOutside)
     }
   }, [])
 
+  /**
+   * Saves the edited title when the input loses focus.
+   * An empty title cancels the edit and says why.
+   */
   function saveTitle(task: Task) {
     const check = TitleInputSchema.safeParse(editingTitle)
     if (!check.success) {
@@ -60,6 +79,7 @@ export function TaskList({ tasks, onRename, onToggle, onChangePriority, onChange
                 checked={task.isDone}
                 onChange={() => onToggle(task)}
               />
+              {/* Clicking the title turns it into an input. Leaving the input saves it. */}
               {editingTaskId === task.id ? (
                 <input
                   value={editingTitle}
@@ -102,6 +122,13 @@ export function TaskList({ tasks, onRename, onToggle, onChangePriority, onChange
                   <option value={1}>Medium</option>
                   <option value={2}>High</option>
                 </select>
+                {/*
+                  The date and time inputs use defaultValue, so React doesn't control them.
+                  The key changes when the saved value changes, which makes React rebuild
+                  the input so it shows the new value.
+                  They save on blur (leaving the input), so half-typed dates aren't sent.
+                  max stops years longer than 4 digits.
+                */}
                 <input
                   key={`date-${task.dueDate ?? 'none'}`}
                   type="date"
@@ -118,6 +145,7 @@ export function TaskList({ tasks, onRename, onToggle, onChangePriority, onChange
                     onChangeDueDate(task, date, task.dueTime)
                   }}
                 />
+                {/* A time with no date gets the next date that time happens (see nextDateFor). */}
                 <input
                   key={`time-${task.dueTime ?? 'none'}`}
                   type="time"
