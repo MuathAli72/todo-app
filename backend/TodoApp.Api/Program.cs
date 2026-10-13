@@ -10,8 +10,15 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TodoDb")));
 builder.Services.AddScoped<TodoListRepository>();
 builder.Services.AddScoped<RoutineRepository>();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "Todo API"));
+}
 
 app.UseCors(policy => policy
     .WithOrigins("http://localhost:5173")
