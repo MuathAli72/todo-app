@@ -36,19 +36,169 @@ static RoutineResponse ToResponse(Routine r, DateOnly today) => new(
     r.IsDoneOn(today),
     r.MissedDays(today));
 
-app.MapGet("/routines", async (RoutineRepository repo) =>
-{
-    var today = Today();
-    var routines = await repo.GetAllAsync();
-    return routines.Select(r => ToResponse(r, today));
-});
+// ---------- Tasks ----------
+// A group gives every endpoint inside it the same address prefix and the same Swagger heading.
 
-app.MapPost("/routines", async (CreateRoutineRequest request, IValidator<CreateRoutineRequest> validator, RoutineRepository repo) =>
+var taskRoutes = app.MapGroup("/tasks").WithTags("Tasks");
+
+taskRoutes.MapGet("/", async (TodoListRepository repo) =>
+{
+    var list = await repo.LoadAsync();
+    return list.Tasks;
+})
+.WithSummary("List all tasks, oldest first");
+
+taskRoutes.MapPost("/", async (CreateTaskRequest request, IValidator<CreateTaskRequest> validator, TodoListRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
+    }
+
+    var list = await repo.LoadAsync();
+    try
+    {
+        var task = list.AddTask(request.Title);
+        await repo.SaveAsync(list);
+        return Results.Created($"/tasks/{task.Id}", task);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new ErrorResponse(ex.Message));
+    }
+})
+.WithSummary("Add a task")
+.Produces<TodoItem>(StatusCodes.Status201Created)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+taskRoutes.MapPatch("/{id}/complete", async (Guid id, TodoListRepository repo) =>
+{
+    var list = await repo.LoadAsync();
+    list.CompleteTask(id);
+    await repo.SaveAsync(list);
+    return Results.NoContent();
+})
+.WithSummary("Mark a task as done")
+.Produces(StatusCodes.Status204NoContent);
+
+taskRoutes.MapPatch("/{id}/reopen", async (Guid id, TodoListRepository repo) =>
+{
+    var list = await repo.LoadAsync();
+    list.ReopenTask(id);
+    await repo.SaveAsync(list);
+    return Results.NoContent();
+})
+.WithSummary("Mark a task as not done")
+.Produces(StatusCodes.Status204NoContent);
+
+taskRoutes.MapPatch("/{id}/title", async (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator, TodoListRepository repo) =>
+{
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
+    }
+
+    var list = await repo.LoadAsync();
+    try
+    {
+        list.EditTitle(id, request.Title);
+        await repo.SaveAsync(list);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new ErrorResponse(ex.Message));
+    }
+})
+.WithSummary("Rename a task")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+taskRoutes.MapPatch("/{id}/priority", async (Guid id, ChangePriorityRequest request, IValidator<ChangePriorityRequest> validator, TodoListRepository repo) =>
+{
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
+    }
+
+    var priority = Enum.Parse<Priority>(request.Priority, true);
+
+    var list = await repo.LoadAsync();
+    try
+    {
+        list.ChangePriority(id, priority);
+        await repo.SaveAsync(list);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new ErrorResponse(ex.Message));
+    }
+})
+.WithSummary("Change a task's priority")
+.WithDescription("Send \"low\", \"medium\" or \"high\". Numbers are rejected.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+taskRoutes.MapPatch("/{id}/due-date", async (Guid id, ChangeDueDateRequest request, IValidator<ChangeDueDateRequest> validator, TodoListRepository repo) =>
+{
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
+    }
+
+    DateOnly? dueDate = string.IsNullOrEmpty(request.DueDate) ? null : DateOnly.Parse(request.DueDate);
+    TimeOnly? dueTime = string.IsNullOrEmpty(request.DueTime) ? null : TimeOnly.Parse(request.DueTime);
+
+    var list = await repo.LoadAsync();
+    try
+    {
+        list.ChangeDueDate(id, dueDate, dueTime);
+        await repo.SaveAsync(list);
+        return Results.NoContent();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new ErrorResponse(ex.Message));
+    }
+})
+.WithSummary("Set or remove a task's due date and time")
+.WithDescription("Send empty strings to remove them. A time needs a date.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+taskRoutes.MapDelete("/{id}", async (Guid id, TodoListRepository repo) =>
+{
+    var list = await repo.LoadAsync();
+    list.DeleteTask(id);
+    await repo.SaveAsync(list);
+    return Results.NoContent();
+})
+.WithSummary("Delete a task")
+.Produces(StatusCodes.Status204NoContent);
+
+// ---------- Routines ----------
+
+var routineRoutes = app.MapGroup("/routines").WithTags("Routines");
+
+routineRoutes.MapGet("/", async (RoutineRepository repo) =>
+{
+    var today = Today();
+    var routines = await repo.GetAllAsync();
+    return routines.Select(r => ToResponse(r, today));
+})
+.WithSummary("List all routines, with today's status and missed days");
+
+routineRoutes.MapPost("/", async (CreateRoutineRequest request, IValidator<CreateRoutineRequest> validator, RoutineRepository repo) =>
+{
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
     }
 
     var days = request.Days.Select(d => Enum.Parse<DayOfWeek>(d, true));
@@ -63,16 +213,20 @@ app.MapPost("/routines", async (CreateRoutineRequest request, IValidator<CreateR
     }
     catch (ArgumentException ex)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.BadRequest(new ErrorResponse(ex.Message));
     }
-});
+})
+.WithSummary("Add a routine")
+.WithDescription("Days are names like \"Monday\". Time is optional, like \"17:00\".")
+.Produces<RoutineResponse>(StatusCodes.Status201Created)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
 
-app.MapPatch("/routines/{id}/title", async (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator, RoutineRepository repo) =>
+routineRoutes.MapPatch("/{id}/title", async (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator, RoutineRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
     }
 
     var routine = await repo.GetAsync(id);
@@ -89,16 +243,20 @@ app.MapPatch("/routines/{id}/title", async (Guid id, EditTitleRequest request, I
     }
     catch (ArgumentException ex)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.BadRequest(new ErrorResponse(ex.Message));
     }
-});
+})
+.WithSummary("Rename a routine")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status404NotFound);
 
-app.MapPatch("/routines/{id}/days", async (Guid id, ChangeDaysRequest request, IValidator<ChangeDaysRequest> validator, RoutineRepository repo) =>
+routineRoutes.MapPatch("/{id}/days", async (Guid id, ChangeDaysRequest request, IValidator<ChangeDaysRequest> validator, RoutineRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
     }
 
     var routine = await repo.GetAsync(id);
@@ -116,16 +274,21 @@ app.MapPatch("/routines/{id}/days", async (Guid id, ChangeDaysRequest request, I
     }
     catch (ArgumentException ex)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.BadRequest(new ErrorResponse(ex.Message));
     }
-});
+})
+.WithSummary("Change a routine's days")
+.WithDescription("Past ticks are kept. Missed-day tracking restarts from today.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status404NotFound);
 
-app.MapPatch("/routines/{id}/time", async (Guid id, ChangeTimeRequest request, IValidator<ChangeTimeRequest> validator, RoutineRepository repo) =>
+routineRoutes.MapPatch("/{id}/time", async (Guid id, ChangeTimeRequest request, IValidator<ChangeTimeRequest> validator, RoutineRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
     }
 
     var routine = await repo.GetAsync(id);
@@ -138,9 +301,14 @@ app.MapPatch("/routines/{id}/time", async (Guid id, ChangeTimeRequest request, I
     routine.ChangeTime(time);
     await repo.SaveAsync();
     return Results.NoContent();
-});
+})
+.WithSummary("Change or remove a routine's time")
+.WithDescription("Send an empty string or null to remove the time.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status404NotFound);
 
-app.MapDelete("/routines/{id}", async (Guid id, RoutineRepository repo) =>
+routineRoutes.MapDelete("/{id}", async (Guid id, RoutineRepository repo) =>
 {
     var routine = await repo.GetAsync(id);
     if (routine == null)
@@ -151,133 +319,17 @@ app.MapDelete("/routines/{id}", async (Guid id, RoutineRepository repo) =>
     repo.Remove(routine);
     await repo.SaveAsync();
     return Results.NoContent();
-});
+})
+.WithSummary("Delete a routine and all its ticks")
+.Produces(StatusCodes.Status204NoContent)
+.Produces(StatusCodes.Status404NotFound);
 
-app.MapGet("/tasks", async (TodoListRepository repo) =>
-{
-    var list = await repo.LoadAsync();
-    return list.Tasks;
-});
-
-app.MapPost("/tasks", async (CreateTaskRequest request, IValidator<CreateTaskRequest> validator, TodoListRepository repo) =>
+routineRoutes.MapPost("/{id}/completions", async (Guid id, TickRequest request, IValidator<TickRequest> validator, RoutineRepository repo) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
     {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
-    }
-
-    var list = await repo.LoadAsync();
-    try
-    {
-        var task = list.AddTask(request.Title);
-        await repo.SaveAsync(list);
-        return Results.Created($"/tasks/{task.Id}", task);
-    }
-    catch (ArgumentException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPatch("/tasks/{id}/complete", async (Guid id, TodoListRepository repo) =>
-{
-    var list = await repo.LoadAsync();
-    list.CompleteTask(id);
-    await repo.SaveAsync(list);
-    return Results.NoContent();
-});
-
-app.MapPatch("/tasks/{id}/reopen", async (Guid id, TodoListRepository repo) =>
-{
-    var list = await repo.LoadAsync();
-    list.ReopenTask(id);
-    await repo.SaveAsync(list);
-    return Results.NoContent();
-});
-
-app.MapPatch("/tasks/{id}/title", async (Guid id, EditTitleRequest request, IValidator<EditTitleRequest> validator, TodoListRepository repo) =>
-{
-    var result = validator.Validate(request);
-    if (!result.IsValid)
-    {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
-    }
-
-    var list = await repo.LoadAsync();
-    try
-    {
-        list.EditTitle(id, request.Title);
-        await repo.SaveAsync(list);
-        return Results.NoContent();
-    }
-    catch (ArgumentException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPatch("/tasks/{id}/priority", async (Guid id, ChangePriorityRequest request, IValidator<ChangePriorityRequest> validator, TodoListRepository repo) =>
-{
-    var result = validator.Validate(request);
-    if (!result.IsValid)
-    {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
-    }
-
-    var priority = Enum.Parse<Priority>(request.Priority, true);
-
-    var list = await repo.LoadAsync();
-    try
-    {
-        list.ChangePriority(id, priority);
-        await repo.SaveAsync(list);
-        return Results.NoContent();
-    }
-    catch (ArgumentException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapPatch("/tasks/{id}/due-date", async (Guid id, ChangeDueDateRequest request, IValidator<ChangeDueDateRequest> validator, TodoListRepository repo) =>
-{
-    var result = validator.Validate(request);
-    if (!result.IsValid)
-    {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
-    }
-
-    DateOnly? dueDate = string.IsNullOrEmpty(request.DueDate) ? null : DateOnly.Parse(request.DueDate);
-    TimeOnly? dueTime = string.IsNullOrEmpty(request.DueTime) ? null : TimeOnly.Parse(request.DueTime);
-
-    var list = await repo.LoadAsync();
-    try
-    {
-        list.ChangeDueDate(id, dueDate, dueTime);
-        await repo.SaveAsync(list);
-        return Results.NoContent();
-    }
-    catch (ArgumentException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
-});
-
-app.MapDelete("/tasks/{id}", async (Guid id, TodoListRepository repo) =>
-{
-    var list = await repo.LoadAsync();
-    list.DeleteTask(id);
-    await repo.SaveAsync(list);
-    return Results.NoContent();
-});
-
-app.MapPost("/routines/{id}/completions", async (Guid id, TickRequest request, IValidator<TickRequest> validator, RoutineRepository repo) =>
-{
-    var result = validator.Validate(request);
-    if (!result.IsValid)
-    {
-        return Results.BadRequest(new { error = result.Errors[0].ErrorMessage });
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
     }
 
     var routine = await repo.GetAsync(id);
@@ -296,15 +348,21 @@ app.MapPost("/routines/{id}/completions", async (Guid id, TickRequest request, I
     }
     catch (ArgumentException ex)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.BadRequest(new ErrorResponse(ex.Message));
     }
     catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
     {
+        // Two ticks for the same day arrived at once. The day is ticked either way.
         return Results.NoContent();
     }
-});
+})
+.WithSummary("Tick a routine for a day")
+.WithDescription("Date as YYYY-MM-DD. Only a scheduled day, not in the future, after the routine existed, and at most 6 days back. Ticking the same day twice is harmless.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces(StatusCodes.Status404NotFound);
 
-app.MapDelete("/routines/{id}/completions/{date}", async (Guid id, DateOnly date, RoutineRepository repo) =>
+routineRoutes.MapDelete("/{id}/completions/{date}", async (Guid id, DateOnly date, RoutineRepository repo) =>
 {
     var routine = await repo.GetAsync(id);
     if (routine == null)
@@ -315,7 +373,12 @@ app.MapDelete("/routines/{id}/completions/{date}", async (Guid id, DateOnly date
     routine.Untick(date);
     await repo.SaveAsync();
     return Results.NoContent();
-});
+})
+.WithSummary("Untick a routine for a day")
+.WithDescription("Date as YYYY-MM-DD in the address, like /routines/{id}/completions/2026-10-13.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces(StatusCodes.Status404NotFound);
+
 app.Run();
 
 public record CreateTaskRequest(string Title);
@@ -335,3 +398,6 @@ public record RoutineResponse(
 public record ChangeDaysRequest(List<string> Days);
 public record ChangeTimeRequest(string? Time);
 public record TickRequest(string Date);
+
+// Every 400 answer has this shape: { "error": "..." }. Naming it lets Swagger show it.
+public record ErrorResponse(string Error);
