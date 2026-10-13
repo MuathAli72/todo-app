@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { z } from 'zod'
-import { API_URL } from '../config'
+import { apiFetch } from '../api'
 import { TaskSchema, type Task } from '../schemas'
 
 /** The server's name for each priority. The position matches Task.priority (0, 1, 2). */
@@ -21,7 +21,7 @@ export function useTasks() {
 
   // Load the tasks once, when the page opens. The empty [] means "run one time".
   useEffect(() => {
-    fetch(`${API_URL}/tasks`)
+    apiFetch('/tasks')
       .then(response => response.json())
       .then(data => {
         const result = z.array(TaskSchema).safeParse(data)
@@ -42,9 +42,8 @@ export function useTasks() {
    * AddBox uses this to decide whether to clear the input.
    */
   function addTask(title: string): Promise<boolean> {
-    return fetch(`${API_URL}/tasks`, {
+    return apiFetch('/tasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title })
     })
       .then(response => {
@@ -74,9 +73,8 @@ export function useTasks() {
    * @returns true if it was saved. false if not (the error was already shown).
    */
   function renameTask(task: Task, title: string): Promise<boolean> {
-    return fetch(`${API_URL}/tasks/${task.id}/title`, {
+    return apiFetch(`/tasks/${task.id}/title`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title })
     })
       .then(response => {
@@ -103,9 +101,8 @@ export function useTasks() {
    * @param newPriority - 0 = low, 1 = medium, 2 = high.
    */
   function changePriority(task: Task, newPriority: number) {
-    fetch(`${API_URL}/tasks/${task.id}/priority`, {
+    apiFetch(`/tasks/${task.id}/priority`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       // The server wants the name ("high"), not the number.
       body: JSON.stringify({ priority: priorityNames[newPriority] })
     })
@@ -127,7 +124,7 @@ export function useTasks() {
   function toggleTask(task: Task) {
     const action = task.isDone ? 'reopen' : 'complete'
 
-    fetch(`${API_URL}/tasks/${task.id}/${action}`, {
+    apiFetch(`/tasks/${task.id}/${action}`, {
       method: 'PATCH'
     })
       .then(response => {
@@ -151,9 +148,8 @@ export function useTasks() {
    * @param time - "HH:mm", or null for no time. A time needs a date.
    */
   function changeDueDate(task: Task, date: string | null, time: string | null) {
-    fetch(`${API_URL}/tasks/${task.id}/due-date`, {
+    apiFetch(`/tasks/${task.id}/due-date`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       // The server reads an empty string as "remove it".
       body: JSON.stringify({ dueDate: date ?? '', dueTime: time ?? '' })
     })
@@ -173,7 +169,7 @@ export function useTasks() {
 
   /** Deletes a task straight away. Unlike routines, there's no confirm: a task has no history to lose. */
   function deleteTask(task: Task) {
-    fetch(`${API_URL}/tasks/${task.id}`, {
+    apiFetch(`/tasks/${task.id}`, {
       method: 'DELETE'
     })
       .then(response => {

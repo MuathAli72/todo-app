@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { z } from 'zod'
-import { API_URL } from '../config'
+import { apiFetch } from '../api'
 import { RoutineSchema, type Routine } from '../schemas'
 import { formatDate } from '../dates'
 
@@ -24,7 +24,7 @@ export type RoutineChanges = {
  * the caller shows the alert.
  */
 function fetchRoutines(): Promise<Routine[]> {
-  return fetch(`${API_URL}/routines`)
+  return apiFetch('/routines')
     .then(response => {
       if (!response.ok) {
         throw new Error()
@@ -67,12 +67,11 @@ export function useRoutines() {
 
     // Tick = POST a completion. Untick = DELETE the completion for that date.
     const request = routine.isDoneToday
-      ? fetch(`${API_URL}/routines/${routine.id}/completions/${today}`, {
+      ? apiFetch(`/routines/${routine.id}/completions/${today}`, {
           method: 'DELETE'
         })
-      : fetch(`${API_URL}/routines/${routine.id}/completions`, {
+      : apiFetch(`/routines/${routine.id}/completions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ date: today })
         })
 
@@ -97,9 +96,8 @@ export function useRoutines() {
    * @param date - "yyyy-MM-dd", one of routine.missedDays.
    */
   function tickMissedDay(routine: Routine, date: string) {
-    fetch(`${API_URL}/routines/${routine.id}/completions`, {
+    apiFetch(`/routines/${routine.id}/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: date })
     })
       .then(response => {
@@ -126,9 +124,8 @@ export function useRoutines() {
    * AddBox uses the result to show the "It'll show on..." notice.
    */
   function addRoutine(title: string, days: string[], time: string): Promise<Routine | null> {
-    return fetch(`${API_URL}/routines`, {
+    return apiFetch('/routines', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       // The server wants null for "no time", not an empty string.
       body: JSON.stringify({ title, days, time: time || null })
     })
@@ -164,14 +161,12 @@ export function useRoutines() {
    * @returns true if every change saved. false if not (the error was already shown).
    */
   function updateRoutine(routine: Routine, changes: RoutineChanges): Promise<boolean> {
-    const url = `${API_URL}/routines/${routine.id}`
-    const headers = { 'Content-Type': 'application/json' }
+    const url = `/routines/${routine.id}`
     const requests: Promise<Response>[] = []
 
     if (changes.title !== routine.title) {
-      requests.push(fetch(`${url}/title`, {
+      requests.push(apiFetch(`${url}/title`, {
         method: 'PATCH',
-        headers,
         body: JSON.stringify({ title: changes.title })
       }))
     }
@@ -181,9 +176,8 @@ export function useRoutines() {
       changes.days.length !== routine.days.length ||
       changes.days.some(d => !routine.days.includes(d))
     if (daysChanged) {
-      requests.push(fetch(`${url}/days`, {
+      requests.push(apiFetch(`${url}/days`, {
         method: 'PATCH',
-        headers,
         body: JSON.stringify({ days: changes.days })
       }))
     }
@@ -191,9 +185,8 @@ export function useRoutines() {
     // The server sends "HH:mm:ss"; the form uses "HH:mm". Compare them the same way.
     const currentTime = routine.time ? routine.time.slice(0, 5) : ''
     if (changes.time !== currentTime) {
-      requests.push(fetch(`${url}/time`, {
+      requests.push(apiFetch(`${url}/time`, {
         method: 'PATCH',
-        headers,
         body: JSON.stringify({ time: changes.time || null })
       }))
     }
@@ -225,7 +218,7 @@ export function useRoutines() {
 
   /** Deletes a routine and all its ticks. RoutineList asks the user to confirm first. */
   function deleteRoutine(routine: Routine) {
-    fetch(`${API_URL}/routines/${routine.id}`, {
+    apiFetch(`/routines/${routine.id}`, {
       method: 'DELETE'
     })
       .then(response => {

@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TodoApp.Core;
 using Npgsql;
@@ -25,7 +26,17 @@ app.UseCors(policy => policy
     .AllowAnyMethod()
     .AllowAnyHeader());
 
-static DateOnly Today() => DateOnly.FromDateTime(DateTime.Now);
+// "Today" for the user, not for the server. The browser sends its time zone (like "Asia/Riyadh")
+// in the X-Time-Zone header. We take the real time (UTC) and convert it to that zone.
+// Missing or unknown zone: use the server's own clock, so Swagger and Postman still work.
+static DateOnly Today(string? timeZone)
+{
+    if (!string.IsNullOrEmpty(timeZone) && TimeZoneInfo.TryFindSystemTimeZoneById(timeZone, out var zone))
+    {
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone));
+    }
+    return DateOnly.FromDateTime(DateTime.Now);
+}
 
 static RoutineResponse ToResponse(Routine r, DateOnly today) => new(
     r.Id,
@@ -214,15 +225,15 @@ taskRoutes.MapDelete("/{id}", async (Guid id, TodoListRepository repo) =>
 
 var routineRoutes = app.MapGroup("/routines").WithTags("Routines");
 
-routineRoutes.MapGet("/", async (RoutineRepository repo) =>
+routineRoutes.MapGet("/", async (RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {
-    var today = Today();
+    var today = Today(timeZone);
     var routines = await repo.GetAllAsync();
     return routines.Select(r => ToResponse(r, today));
 })
 .WithSummary("List all routines, with today's status and missed days");
 
-routineRoutes.MapPost("/", async (CreateRoutineRequest request, IValidator<CreateRoutineRequest> validator, RoutineRepository repo) =>
+routineRoutes.MapPost("/", async (CreateRoutineRequest request, IValidator<CreateRoutineRequest> validator, RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -235,10 +246,11 @@ routineRoutes.MapPost("/", async (CreateRoutineRequest request, IValidator<Creat
 
     try
     {
-        var routine = new Routine(request.Title, days, time, Today());
+        var today = Today(timeZone);
+        var routine = new Routine(request.Title, days, time, today);
         repo.Add(routine);
         await repo.SaveAsync();
-        return Results.Created($"/routines/{routine.Id}", ToResponse(routine, Today()));
+        return Results.Created($"/routines/{routine.Id}", ToResponse(routine, today));
     }
     catch (ArgumentException ex)
     {
@@ -280,7 +292,7 @@ routineRoutes.MapPatch("/{id}/title", async (Guid id, EditTitleRequest request, 
 .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
 .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
-routineRoutes.MapPatch("/{id}/days", async (Guid id, ChangeDaysRequest request, IValidator<ChangeDaysRequest> validator, RoutineRepository repo) =>
+routineRoutes.MapPatch("/{id}/days", async (Guid id, ChangeDaysRequest request, IValidator<ChangeDaysRequest> validator, RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -297,7 +309,7 @@ routineRoutes.MapPatch("/{id}/days", async (Guid id, ChangeDaysRequest request, 
     try
     {
         var days = request.Days.Select(d => Enum.Parse<DayOfWeek>(d, true));
-        routine.ChangeDays(days, Today());
+        routine.ChangeDays(days, Today(timeZone));
         await repo.SaveAsync();
         return Results.NoContent();
     }
@@ -353,7 +365,7 @@ routineRoutes.MapDelete("/{id}", async (Guid id, RoutineRepository repo) =>
 .Produces(StatusCodes.Status204NoContent)
 .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
-routineRoutes.MapPost("/{id}/completions", async (Guid id, TickRequest request, IValidator<TickRequest> validator, RoutineRepository repo) =>
+routineRoutes.MapPost("/{id}/completions", async (Guid id, TickRequest request, IValidator<TickRequest> validator, RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -371,7 +383,7 @@ routineRoutes.MapPost("/{id}/completions", async (Guid id, TickRequest request, 
 
     try
     {
-        routine.Tick(date, Today());
+        routine.Tick(date, Today(timeZone));
         await repo.SaveAsync();
         return Results.NoContent();
     }
