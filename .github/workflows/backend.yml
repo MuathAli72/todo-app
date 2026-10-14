@@ -1,0 +1,44 @@
+# Backend CI: restores, builds and tests the .NET backend on GitHub's computers.
+# What it does and how to fix a failure is in the runbook.
+
+name: Backend CI
+
+on:
+  # Every pull request into main. Always runs (no folder filter), because main is
+  # protected: GitHub waits for this check, and a check that never runs would block the merge.
+  pull_request:
+    branches: [main]
+  # Every push to main (that's what a merge is), but only when backend files changed.
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+
+# The pipeline only needs to read the code. Giving it the least access is safer.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore packages
+        run: dotnet restore backend/TodoApp.slnx
+
+      # Release is the mode real deployments use, so that's what we check.
+      - name: Build
+        run: dotnet build backend/TodoApp.slnx --no-restore --configuration Release
+
+      # The tests don't need a database, so they run anywhere.
+      - name: Run tests
+        run: dotnet test backend/TodoApp.slnx --no-build --configuration Release
