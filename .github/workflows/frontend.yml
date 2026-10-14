@@ -1,0 +1,50 @@
+# Frontend CI: installs, type-checks and builds the React frontend on GitHub's computers.
+# What it does and how to fix a failure is in the runbook.
+
+name: Frontend CI
+
+on:
+  # Every pull request into main. Always runs (no folder filter), because main is
+  # protected: GitHub waits for this check, and a check that never runs would block the merge.
+  pull_request:
+    branches: [main]
+  # Every push to main (that's what a merge is), but only when frontend files changed.
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+
+# The pipeline only needs to read the code. Giving it the least access is safer.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Type-check and build
+    runs-on: ubuntu-latest
+    # Every "run" step below starts inside the frontend folder.
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          # Reuses downloaded packages between runs, so installs are faster.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci installs exactly what package-lock.json says, nothing newer.
+      # Same packages on every machine, so "works on my machine" can't happen.
+      - name: Install packages
+        run: npm ci
+
+      # "build" runs the TypeScript checker (tsc -b) first, then Vite.
+      # Any type error fails this step.
+      - name: Type-check and build
+        run: npm run build
