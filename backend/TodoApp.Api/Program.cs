@@ -1,8 +1,8 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using TodoApp.Core;
 using Npgsql;
+using TodoApp.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors();

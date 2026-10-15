@@ -1,4 +1,4 @@
-# Frontend CI: installs, type-checks and builds the React frontend on GitHub's computers.
+# Frontend CI: installs, scans, type-checks and builds the React frontend on GitHub's computers.
 # What it does and how to fix a failure is in the runbook.
 
 name: Frontend CI
@@ -43,6 +43,11 @@ jobs:
       # Same packages on every machine, so "works on my machine" can't happen.
       - name: Install packages
         run: npm ci
+
+      # Scanner: ESLint checks code quality and the naming rules in eslint.config.js.
+      # --max-warnings 0 means warnings fail the run too, so they can't pile up.
+      - name: Scan naming and code quality
+        run: npm run lint -- --max-warnings 0
 
       # "build" runs the TypeScript checker (tsc -b) first, then Vite.
       # Any type error fails this step.

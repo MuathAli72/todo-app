@@ -1,4 +1,4 @@
-# Backend CI: restores, builds and tests the .NET backend on GitHub's computers.
+# Backend CI: restores, scans, builds and tests the .NET backend on GitHub's computers.
 # What it does and how to fix a failure is in the runbook.
 
 name: Backend CI
@@ -13,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - '.editorconfig'
       - '.github/workflows/backend.yml'
 
 # The pipeline only needs to read the code. Giving it the least access is safer.
@@ -34,6 +35,12 @@ jobs:
 
       - name: Restore packages
         run: dotnet restore backend/TodoApp.slnx
+
+      # Scanner: checks naming and formatting against the rules in .editorconfig.
+      # --verify-no-changes means "only report, don't fix". Any problem fails this step.
+      # To fix it on your computer, run the same command without --verify-no-changes.
+      - name: Scan naming and code style
+        run: dotnet format backend/TodoApp.slnx --verify-no-changes --no-restore --severity warn
 
       # Release is the mode real deployments use, so that's what we check.
       - name: Build
