@@ -21,10 +21,9 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<Routine>(routine =>
         {
             routine.Ignore(r => r.Days);
-            // The model property keeps the name "days" (so the database and migrations don't change),
-            // but the value lives in the private field _days.
-            routine.Property<List<DayOfWeek>>("days")
-                .HasField("_days")
+            // The days live in the private field _days. EF needs the field's exact name,
+            // and HasColumnName keeps the database column called "Days".
+            routine.Property<List<DayOfWeek>>("_days")
                 .HasColumnName("Days")
                 .HasConversion(
                     days => string.Join(",", days),
