@@ -12,6 +12,13 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
 builder.Services.AddScoped<TodoListRepository>();
 builder.Services.AddScoped<RoutineRepository>();
 builder.Services.AddOpenApi();
+// A simple "are you alive?" check. Render and the CD pipeline call /health after a deploy.
+builder.Services.AddHealthChecks();
+
+// Which websites may call this API. On your laptop: the Vite dev server.
+// On the live server: set in Render's settings as Cors__AllowedOrigins__0, so no code change is needed.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:5173"];
 
 var app = builder.Build();
 
@@ -22,7 +29,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(policy => policy
-    .WithOrigins("http://localhost:5173")
+    .WithOrigins(allowedOrigins)
     .AllowAnyMethod()
     .AllowAnyHeader());
 
@@ -51,6 +58,8 @@ static RoutineResponse ToResponse(Routine r, DateOnly today) => new(
 // They carry an { error } message like the 400s, so the frontend can show it.
 static IResult TaskNotFound() => Results.NotFound(new ErrorResponse("That task doesn't exist. It may have been deleted."));
 static IResult RoutineNotFound() => Results.NotFound(new ErrorResponse("That routine doesn't exist. It may have been deleted."));
+
+app.MapHealthChecks("/health");
 
 // ---------- Tasks ----------
 // A group gives every endpoint inside it the same address prefix and the same Swagger heading.

@@ -49,3 +49,8 @@ jobs:
       # The tests don't need a database, so they run anywhere.
       - name: Run tests
         run: dotnet test backend/TodoApp.slnx --no-build --configuration Release
+
+      # Builds the Docker container from backend/Dockerfile (the same recipe Render uses),
+      # so a broken Dockerfile is caught here instead of on the live server.
+      - name: Build Docker image
+        run: docker build --tag todo-api backend
