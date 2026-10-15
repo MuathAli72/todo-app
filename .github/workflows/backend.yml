@@ -79,6 +79,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Restore packages
+        run: dotnet restore backend/TodoApp.slnx
+
+      - name: Update the live database (migrations)
+
       # dotnet-ef is the command-line tool that applies migrations (like Update-Database in Visual Studio).
       - name: Install the EF Core tool
         run: |
