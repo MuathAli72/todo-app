@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using TodoApp.Core;
 
 public class TodoDbContext : DbContext
@@ -21,7 +21,10 @@ public class TodoDbContext : DbContext
         modelBuilder.Entity<Routine>(routine =>
         {
             routine.Ignore(r => r.Days);
+            // The model property keeps the name "days" (so the database and migrations don't change),
+            // but the value lives in the private field _days.
             routine.Property<List<DayOfWeek>>("days")
+                .HasField("_days")
                 .HasColumnName("Days")
                 .HasConversion(
                     days => string.Join(",", days),

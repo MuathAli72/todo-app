@@ -17,15 +17,15 @@ public class Routine
 
     // Private lists, so outside code can't add or remove items directly.
     // Outside code gets the read-only Days and Completions below.
-    private List<DayOfWeek> days = new();
-    private List<Completion> completions = new();
+    private List<DayOfWeek> _days = new();
+    private List<Completion> _completions = new();
 
     /// <summary>The routine's unique id.</summary>
     public Guid Id { get; private set; } = Guid.NewGuid();
     /// <summary>The name shown in the list. Never empty.</summary>
     public string Title { get; private set; }
     /// <summary>The days of the week it repeats on. At least one, no duplicates.</summary>
-    public IReadOnlyList<DayOfWeek> Days => days.AsReadOnly();
+    public IReadOnlyList<DayOfWeek> Days => _days.AsReadOnly();
     /// <summary>An optional time of day, like 07:00. Only shown on screen; no rule uses it.</summary>
     public TimeOnly? Time { get; private set; }
     /// <summary>The day the routine was created. Never changes.</summary>
@@ -41,7 +41,7 @@ public class Routine
     /// </remarks>
     public DateOnly ScheduleStartsOn { get; private set; }
     /// <summary>Every tick, read-only. Use <see cref="Tick"/> and <see cref="Untick"/> to change them.</summary>
-    public IReadOnlyList<Completion> Completions => completions.AsReadOnly();
+    public IReadOnlyList<Completion> Completions => _completions.AsReadOnly();
 
     // For EF Core only: it needs an empty constructor to load rows from the database.
     private Routine()
@@ -60,18 +60,18 @@ public class Routine
         CheckTitle(title);
         var dayList = CheckDays(days);
         Title = title;
-        this.days = dayList;
+        _days = dayList;
         Time = time;
         CreatedOn = createdOn;
         ScheduleStartsOn = createdOn;
     }
 
     /// <summary>True if <paramref name="date"/> falls on one of the routine's days.</summary>
-    public bool IsScheduledOn(DateOnly date) => days.Contains(date.DayOfWeek);
+    public bool IsScheduledOn(DateOnly date) => _days.Contains(date.DayOfWeek);
     /// <summary>True if <paramref name="date"/> is on or after <see cref="ScheduleStartsOn"/>.</summary>
     public bool ExistedOn(DateOnly date) => date >= ScheduleStartsOn;
     /// <summary>True if <paramref name="date"/> has been ticked.</summary>
-    public bool IsDoneOn(DateOnly date) => completions.Any(c => c.Date == date);
+    public bool IsDoneOn(DateOnly date) => _completions.Any(c => c.Date == date);
 
     /// <summary>Renames the routine.</summary>
     /// <exception cref="ArgumentException">The new title is empty or only spaces.</exception>
@@ -93,7 +93,7 @@ public class Routine
     /// <exception cref="ArgumentException">No days were picked.</exception>
     public void ChangeDays(IEnumerable<DayOfWeek> newDays, DateOnly today)
     {
-        days = CheckDays(newDays);
+        _days = CheckDays(newDays);
         ScheduleStartsOn = today;
     }
 
@@ -128,14 +128,14 @@ public class Routine
         {
             return;
         }
-        completions.Add(new Completion(date));
+        _completions.Add(new Completion(date));
     }
 
     /// <summary>Removes the tick for <paramref name="date"/>, if there is one.</summary>
     /// <remarks>No rules here, so a wrong tick can always be undone. Unticking a day that isn't ticked does nothing.</remarks>
     public void Untick(DateOnly date)
     {
-        completions.RemoveAll(c => c.Date == date);
+        _completions.RemoveAll(c => c.Date == date);
     }
 
     /// <summary>The days in the last 6 days (not counting today) that were scheduled but not ticked.</summary>

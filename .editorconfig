@@ -1,0 +1,85 @@
+# Coding standards for the whole repo.
+# Visual Studio and VS Code read this file while you type, and the CI pipeline
+# checks it on every pull request (dotnet format). One file, one set of rules.
+# Rules follow Microsoft's official C# conventions.
+
+root = true
+
+[*]
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+# end_of_line is left out on purpose: Git turns line endings into CRLF on Windows
+# and LF on GitHub's Linux machines. Forcing one would fail on the other.
+
+[*.{ts,tsx,js,json,css,html,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+indent_size = 4
+
+# ---------- Formatting (dotnet format fixes these automatically) ----------
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_after_cast = false
+dotnet_sort_system_directives_first = true
+
+# ---------- Naming (Microsoft's C# conventions) ----------
+# "warning" makes the CI scanner fail the pipeline when a rule is broken.
+dotnet_diagnostic.IDE1006.severity = warning
+
+# Interfaces start with I: IRepository
+dotnet_naming_rule.interfaces_begin_with_i.symbols = interfaces
+dotnet_naming_rule.interfaces_begin_with_i.style = begins_with_i
+dotnet_naming_rule.interfaces_begin_with_i.severity = warning
+
+# Classes, records, structs, enums: PascalCase
+dotnet_naming_rule.types_are_pascal_case.symbols = types
+dotnet_naming_rule.types_are_pascal_case.style = pascal_case
+dotnet_naming_rule.types_are_pascal_case.severity = warning
+
+# Methods, properties, events: PascalCase
+dotnet_naming_rule.members_are_pascal_case.symbols = non_field_members
+dotnet_naming_rule.members_are_pascal_case.style = pascal_case
+dotnet_naming_rule.members_are_pascal_case.severity = warning
+
+# Constants: PascalCase (LateWindowDays)
+dotnet_naming_rule.constants_are_pascal_case.symbols = constant_fields
+dotnet_naming_rule.constants_are_pascal_case.style = pascal_case
+dotnet_naming_rule.constants_are_pascal_case.severity = warning
+
+# Private fields: _camelCase (_days, _db)
+dotnet_naming_rule.private_fields_are_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_are_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel_case.severity = warning
+
+# Which symbols each rule is about
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.types.applicable_kinds = class, struct, interface, enum, delegate
+dotnet_naming_symbols.non_field_members.applicable_kinds = property, event, method
+dotnet_naming_symbols.constant_fields.applicable_kinds = field
+dotnet_naming_symbols.constant_fields.required_modifiers = const
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+# What each style looks like
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.begins_with_i.required_prefix = I
+dotnet_naming_style.begins_with_i.capitalization = pascal_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+# Test names read like sentences: Tick_FutureDay_Throws. That's Microsoft's own
+# recommended style for tests, so the PascalCase rule for methods is off there.
+[backend/TodoApp.Tests/**.cs]
+dotnet_naming_rule.members_are_pascal_case.severity = none
