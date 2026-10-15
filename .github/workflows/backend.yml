@@ -1,4 +1,5 @@
-# Backend CI: restores, scans, builds and tests the .NET backend on GitHub's computers.
+# Backend CI/CD: restores, scans, builds and tests the .NET backend on GitHub's computers.
+# After a merge to main it also updates the live database and deploys the API to Render.
 # What it does and how to fix a failure is in the runbook.
 
 name: Backend CI
@@ -54,3 +55,48 @@ jobs:
       # so a broken Dockerfile is caught here instead of on the live server.
       - name: Build Docker image
         run: docker build --tag todo-api backend
+
+  deploy:
+    name: Deploy to Render
+    # Only after a merge to main (never on a pull request), and only if build-and-test passed.
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # One deploy at a time: a newer deploy waits for the running one instead of overlapping it.
+    concurrency:
+      group: backend-deploy
+      cancel-in-progress: false
+    # Shows up under "Deployments" on GitHub, with a link to the live API.
+    environment:
+      name: production
+      url: ${{ vars.API_URL }}/health
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      # dotnet-ef is the command-line tool that applies migrations (like Update-Database in Visual Studio).
+      - name: Install the EF Core tool
+        run: |
+          dotnet tool install --global dotnet-ef --version '10.*'
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      # Updates the live database's tables BEFORE the new code goes live.
+      # If a migration fails, this step fails and the deploy below never happens.
+      # The connection string comes from the repo's secrets (hidden in the logs), under the
+      # same setting name the app uses on Render and in your User Secrets.
+      - name: Update the live database (migrations)
+        run: dotnet ef database update --project backend/TodoApp.Api
+        env:
+          ConnectionStrings__TodoDb: ${{ secrets.DATABASE_CONNECTION_STRING }}
+
+      # Presses Render's secret "deploy now" button. Render then builds backend/Dockerfile
+      # and swaps the new version in. Progress shows on the Render dashboard.
+      - name: Tell Render to deploy
+        run: curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
