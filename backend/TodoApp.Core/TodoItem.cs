@@ -34,7 +34,7 @@ public class TodoItem
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            throw new ArgumentException("Title required");
+            throw new ArgumentException("Please enter a title");
         }
         Title = title;
         IsDone = false;
@@ -83,7 +83,7 @@ public class TodoItem
     {
         if (string.IsNullOrWhiteSpace(newTitle))
         {
-            throw new ArgumentException("Title required");
+            throw new ArgumentException("Please enter a title");
         }
         Title = newTitle;
     }

@@ -1,7 +1,7 @@
 import { API_URL } from './config'
 
 /** The user's time zone, like "Asia/Riyadh". The browser knows it from the device settings. */
-const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+const time_zone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 /**
  * fetch, plus what every request to our server needs.
@@ -17,7 +17,7 @@ const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
  */
 export function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers)
-  headers.set('X-Time-Zone', timeZone)
+  headers.set('X-Time-Zone', time_zone)
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }

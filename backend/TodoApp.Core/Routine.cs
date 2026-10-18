@@ -57,7 +57,7 @@ public class Routine
     /// <exception cref="ArgumentException">The title is empty, or no days were picked.</exception>
     public Routine(string title, IEnumerable<DayOfWeek> days, TimeOnly? time, DateOnly createdOn)
     {
-        CheckTitle(title);
+        checkTitle(title);
         var dayList = CheckDays(days);
         Title = title;
         _days = dayList;
@@ -77,7 +77,7 @@ public class Routine
     /// <exception cref="ArgumentException">The new title is empty or only spaces.</exception>
     public void EditTitle(string newTitle)
     {
-        CheckTitle(newTitle);
+        checkTitle(newTitle);
         Title = newTitle;
     }
 
@@ -169,7 +169,7 @@ public class Routine
     }
 
     // Used by the constructor and EditTitle, so the title rule lives in one place.
-    private static void CheckTitle(string title)
+    private static void checkTitle(string title)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
