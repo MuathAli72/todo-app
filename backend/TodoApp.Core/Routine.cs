@@ -56,7 +56,7 @@ public class Routine
     /// <param name="createdOn">Today's date. The schedule counts from here.</param>
     /// <exception cref="ArgumentException">The title is empty, or no days were picked.</exception>
     public Routine(string title, IEnumerable<DayOfWeek> days, TimeOnly? time, DateOnly createdOn)
-    {
+    {   //DEMO: wrong on purpose. methods must be PascalCase
         checkTitle(title);
         var dayList = CheckDays(days);
         Title = title;
