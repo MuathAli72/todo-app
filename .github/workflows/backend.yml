@@ -103,3 +103,33 @@ jobs:
         run: curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+  publish-image:
+    name: Publish image
+    # Only after a merge to main, and only if build-and-test passed.
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Uploading to GitHub's image storage (GHCR) needs write access to "packages".
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Image names must be all lowercase.
+      IMAGE: ghcr.io/muathali72/todo-api
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      # Logs in with the token GitHub gives every run. No secret to set up.
+      - name: Log in to GitHub's image storage
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      # Two labels on the same image:
+      # - the commit ID, so every image points to exact code (and old ones stay reachable for rollback)
+      # - latest, as a shortcut to the newest one
+      - name: Build the image
+        run: docker build --tag "$IMAGE:${{ github.sha }}" --tag "$IMAGE:latest" backend
+
+      - name: Upload the image
+        run: docker push --all-tags "$IMAGE"
