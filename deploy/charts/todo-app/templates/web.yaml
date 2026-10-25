@@ -21,7 +21,7 @@ spec:
             matchLabels: { app: todo-web }
       containers:
         - name: web
-          image: "{{ .Values.image.registry }}/todo-web:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.registry }}/todo-web:{{ .Values.web.tag }}"
           ports:
             - containerPort: 8080      # set in frontend/Dockerfile
           resources:

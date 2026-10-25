@@ -22,7 +22,7 @@ spec:
             matchLabels: { app: todo-api }
       containers:
         - name: api
-          image: "{{ .Values.image.registry }}/todo-api:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.registry }}/todo-api:{{ .Values.api.tag }}"
           ports:
             - containerPort: 10000     # set in backend/Dockerfile
           env:

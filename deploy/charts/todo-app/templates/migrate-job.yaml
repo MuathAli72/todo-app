@@ -16,7 +16,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: "{{ .Values.image.registry }}/todo-migrate:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.registry }}/todo-migrate:{{ .Values.api.tag }}"
           args: ["--connection", "$(CONNECTION_STRING)"]
           env:
             - name: DB_USER
