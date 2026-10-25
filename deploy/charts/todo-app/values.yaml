@@ -1,11 +1,14 @@
 # Settings for the to-do app. Change values here, not in templates/.
 
-# Where the images come from, and which version to run.
-# "tag" can be "latest" or a commit ID (e.g. db39fe4...). A commit ID runs that exact code,
-# and setting an older one is how you roll back.
+# Where the images come from.
 image:
   registry: ghcr.io/muathali72
-  tag: latest
+
+# Which version of each image to run: "latest", or a full commit ID from GitHub.
+# A commit ID runs that exact code; setting an older one is how you roll back.
+# The API and frontend have separate tags because CI only rebuilds the side that changed,
+# so a backend-only commit has no frontend image (and the other way round).
+# The migrations image always uses the API's tag (both are built from the same commit).
 
 # How the app reaches the database (from the todo-db chart).
 database:
@@ -19,6 +22,7 @@ gateway:
 
 # The website files (nginx). Light work; 2 so one survives if the other dies.
 web:
+  tag: latest
   replicas: 2
   resources:
     requests:
@@ -29,6 +33,7 @@ web:
 
 # The API. Takes the traffic; with 3, two stay up while one is being updated.
 api:
+  tag: latest
   replicas: 3
   resources:
     requests:
