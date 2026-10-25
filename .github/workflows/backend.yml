@@ -1,5 +1,6 @@
 # Backend CI/CD: restores, scans, builds and tests the .NET backend on GitHub's computers.
-# After a merge to main it also updates the live database and deploys the API to Render.
+# After a merge to main it also updates the live database, deploys the API to Render,
+# and publishes the API and migrations images to GitHub's image storage (GHCR).
 # What it does and how to fix a failure is in the runbook.
 
 name: Backend CI
@@ -117,6 +118,7 @@ jobs:
     env:
       # Image names must be all lowercase.
       IMAGE: ghcr.io/muathali72/todo-api
+      MIGRATE_IMAGE: ghcr.io/muathali72/todo-migrate
     steps:
       - name: Get the code
         uses: actions/checkout@v6
@@ -133,3 +135,11 @@ jobs:
 
       - name: Upload the image
         run: docker push --all-tags "$IMAGE"
+
+      # The migrations helper comes from the same Dockerfile (the "migrate" stage).
+      # Same labels, so the API and its migrations always come from the same commit.
+      - name: Build the migrations image
+        run: docker build --target migrate --tag "$MIGRATE_IMAGE:${{ github.sha }}" --tag "$MIGRATE_IMAGE:latest" backend
+
+      - name: Upload the migrations image
+        run: docker push --all-tags "$MIGRATE_IMAGE"

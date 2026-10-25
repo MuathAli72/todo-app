@@ -1,5 +1,7 @@
-# The recipe for packing the API into a container that Render (or any server) can run.
-# Build it yourself from the backend folder:  docker build -t todo-api .
+# The recipe for packing the backend into containers.
+# It makes two images from the same code:
+#   - the API (the default):        docker build -t todo-api .
+#   - the migrations helper:        docker build --target migrate -t todo-migrate .
 
 # ---------- Stage 1: build ----------
 # Start from Microsoft's image that has the full .NET 10 SDK (the tools to build code).
@@ -18,10 +20,27 @@ COPY TodoApp.Core/ TodoApp.Core/
 COPY TodoApp.Api/ TodoApp.Api/
 RUN dotnet publish TodoApp.Api/TodoApp.Api.csproj --configuration Release --output /app --no-restore
 
-# ---------- Stage 2: run ----------
+# ---------- Stage 2: build the migrations helper ----------
+# Packs all migrations into one small program ("efbundle") that applies them and exits.
+# Only built when asked for with --target migrate, so the API build doesn't pay for it.
+FROM build AS bundle
+RUN dotnet tool install --global dotnet-ef --version '10.*'
+ENV PATH="$PATH:/root/.dotnet/tools"
+RUN dotnet ef migrations bundle --project TodoApp.Api/TodoApp.Api.csproj --configuration Release --output /bundle/efbundle
+
+# ---------- Stage 3: the migrations helper image ----------
+# Small runtime image with just the bundle. Kubernetes runs it once before the API starts.
+# Usage: ./efbundle --connection "<connection string>"
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS migrate
+WORKDIR /app
+COPY --from=bundle /bundle/efbundle .
+USER $APP_UID
+ENTRYPOINT ["./efbundle"]
+
+# ---------- Stage 4: the API image (the default, because it's last) ----------
 # Start again from a much smaller image that can only run .NET apps, not build them.
 # Only the finished app from stage 1 is copied in, so the final container stays small.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS api
 WORKDIR /app
 COPY --from=build /app .
 
