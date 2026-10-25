@@ -1,0 +1,38 @@
+# Settings for the to-do app. Change values here, not in templates/.
+
+# Where the images come from, and which version to run.
+# "tag" can be "latest" or a commit ID (e.g. db39fe4...). A commit ID runs that exact code,
+# and setting an older one is how you roll back.
+image:
+  registry: ghcr.io/muathali72
+  tag: latest
+
+# How the app reaches the database (from the todo-db chart).
+database:
+  host: todo-db-rw      # always points to the current primary
+  name: todo
+  secret: todo-db-app   # holds the username and password; the operator creates it
+
+# The front door. It's the only way in, so never fewer than 2.
+gateway:
+  replicas: 2
+
+# The website files (nginx). Light work; 2 so one survives if the other dies.
+web:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+# The API. Takes the traffic; with 3, two stay up while one is being updated.
+api:
+  replicas: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi

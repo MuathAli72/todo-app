@@ -1,0 +1,19 @@
+# A PostgreSQL cluster, run by the CloudNativePG operator (installed separately, see the playbook).
+# The operator keeps the backup in sync and promotes it automatically if the primary dies.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.name }}
+spec:
+  instances: {{ .Values.instances }}
+  storage:
+    size: {{ .Values.storageSize }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.database }}
+      owner: {{ .Values.owner }}
+  # Never put two copies on the same node.
+  affinity:
+    podAntiAffinityType: required
+  resources:
+    {{- toYaml .Values.resources | nindent 4 }}
