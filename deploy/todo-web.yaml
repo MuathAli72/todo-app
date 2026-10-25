@@ -1,0 +1,47 @@
+# The frontend: 2 copies of the nginx box that hands out the website files.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-web
+spec:
+  replicas: 2                  # light work; 2 so one survives if the other dies
+  selector:
+    matchLabels: { app: todo-web }
+  template:
+    metadata:
+      labels: { app: todo-web }
+    spec:
+      # Same spread rule as the API: one copy per worker node.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels: { app: todo-web }
+      containers:
+        - name: web
+          image: ghcr.io/muathali72/todo-web:latest
+          ports:
+            - containerPort: 8080       # nginx listens here (see frontend/Dockerfile)
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# One fixed address ("todo-web") for both copies.
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-web
+spec:
+  selector: { app: todo-web }
+  ports:
+    - port: 80
+      targetPort: 8080
