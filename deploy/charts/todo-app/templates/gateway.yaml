@@ -1,6 +1,7 @@
 # The front door: one address for the whole app.
 #   /api/...         -> the API (with "/api" removed, so the API still gets /tasks)
 #   everything else  -> the frontend
+# Needs Envoy Gateway installed first (see the playbook).
 
 # Which tool runs the front door (Envoy Gateway), and with what settings.
 apiVersion: gateway.networking.k8s.io/v1
@@ -9,26 +10,26 @@ metadata:
   name: envoy
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
-  parametersRef:               # use the settings below
+  parametersRef:
     group: gateway.envoyproxy.io
     kind: EnvoyProxy
-    name: two-copies
+    name: todo-proxy
     namespace: envoy-gateway-system
 ---
-# Settings: run 2 copies of the front door (it's the only way in, so never just 1).
+# Settings for the front door itself: how many copies.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
-  name: two-copies
+  name: todo-proxy
   namespace: envoy-gateway-system
 spec:
   provider:
     type: Kubernetes
     kubernetes:
       envoyDeployment:
-        replicas: 2
+        replicas: {{ .Values.gateway.replicas }}
 ---
-# The door itself: listen for normal web traffic on port 80.
+# The door: listen for normal web traffic on port 80.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -47,9 +48,9 @@ metadata:
   name: todo-routes
 spec:
   parentRefs:
-    - name: todo-gateway       # these rules belong to the door above
+    - name: todo-gateway
   rules:
-    # Rule 1: anything starting with /api goes to the API, minus the "/api" part.
+    # Anything starting with /api goes to the API, minus the "/api" part.
     - matches:
         - path: { type: PathPrefix, value: /api }
       filters:
@@ -59,7 +60,7 @@ spec:
       backendRefs:
         - name: todo-api
           port: 80
-    # Rule 2: everything else goes to the frontend.
+    # Everything else goes to the frontend.
     - matches:
         - path: { type: PathPrefix, value: / }
       backendRefs:

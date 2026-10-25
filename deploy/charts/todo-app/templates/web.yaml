@@ -1,17 +1,17 @@
-# The frontend: 2 copies of the nginx box that hands out the website files.
+# The frontend: copies of the nginx box that hands out the website files.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: todo-web
 spec:
-  replicas: 2                  # light work; 2 so one survives if the other dies
+  replicas: {{ .Values.web.replicas }}
   selector:
     matchLabels: { app: todo-web }
   template:
     metadata:
       labels: { app: todo-web }
     spec:
-      # Same spread rule as the API: one copy per worker node.
+      # Same spread rule as the API.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -21,12 +21,11 @@ spec:
             matchLabels: { app: todo-web }
       containers:
         - name: web
-          image: ghcr.io/muathali72/todo-web:latest
+          image: "{{ .Values.image.registry }}/todo-web:{{ .Values.image.tag }}"
           ports:
-            - containerPort: 8080       # nginx listens here (see frontend/Dockerfile)
+            - containerPort: 8080      # set in frontend/Dockerfile
           resources:
-            requests: { cpu: 50m, memory: 32Mi }
-            limits: { memory: 64Mi }
+            {{- toYaml .Values.web.resources | nindent 12 }}
           readinessProbe:
             httpGet: { path: /, port: 8080 }
             periodSeconds: 5
@@ -35,7 +34,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
-# One fixed address ("todo-web") for both copies.
+# One fixed address ("todo-web") for all copies.
 apiVersion: v1
 kind: Service
 metadata:
