@@ -84,9 +84,10 @@ part of it crashes, a machine goes down, or a new version is being rolled out.
 - This runs on **one PC** with 3 simulated nodes (kind, inside Docker Desktop). It survives a copy
   crashing or a node going away, but if the PC or Docker Desktop stops, everything stops. A real
   company runs the same charts on separate physical machines.
-- **Database failover takes seconds, not zero.** During that time writes fail; then the backup takes over
-  automatically. A clean shutdown switches in about 3 seconds; a real crash takes longer (tens of
-  seconds), because the operator must first be sure the primary is really dead.
+- **Database failover is automatic, but not instant.** With no app connected, deleting the primary
+  switched over in about 3 seconds. **With the API connected, it took about 2 minutes**: requests
+  flickered between OK and FAIL until the backup took over. Being investigated (see the roadmap);
+  until then, expect up to a few minutes of errors when the primary dies.
 - **`kubectl port-forward` is a test tool** that connects to one single pod. If that pod moves, the
   tunnel dies even though the app is fine. In production, a load balancer sits in front of both
   front-door copies instead.

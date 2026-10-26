@@ -19,6 +19,10 @@ spec:
           nodeTaintsPolicy: Honor
           labelSelector:
             matchLabels: { app: todo-web }
+          # Only count copies of the SAME version when spreading. Without this, during an
+          # update the old copies are counted too, and the new ones can pile onto one node.
+          matchLabelKeys:
+            - pod-template-hash
       containers:
         - name: web
           image: "{{ .Values.image.registry }}/todo-web:{{ .Values.web.tag }}"
