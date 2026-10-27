@@ -12,7 +12,7 @@ using Testcontainers.PostgreSql;
 /// </remarks>
 public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-       private readonly PostgreSqlContainer _database = new PostgreSqlBuilder("postgres:17-alpine").Build();
+    private readonly PostgreSqlContainer _database = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
     /// <summary>Starts the database and creates the tables, before any test runs.</summary>
     public async Task InitializeAsync()
