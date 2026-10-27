@@ -13,6 +13,8 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TodoDb")));
 builder.Services.AddScoped<TodoListRepository>();
 builder.Services.AddScoped<RoutineRepository>();
+// Lets TodoDbContext read who is logged in for the current request (for the per-user filter).
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
 // A simple "are you alive?" check. Render and the CD pipeline call /health after a deploy.
 builder.Services.AddHealthChecks();
@@ -48,15 +50,16 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
     // An API answers 401/403. Without these, the cookie would try to redirect
     // to a login web page that doesn't exist.
+    // They also send the usual { "error": "..." } shape, so the frontend can show the message.
     options.Events.OnRedirectToLogin = context =>
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return Task.CompletedTask;
+        return context.Response.WriteAsJsonAsync(new ErrorResponse("Please log in first."));
     };
     options.Events.OnRedirectToAccessDenied = context =>
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return Task.CompletedTask;
+        return context.Response.WriteAsJsonAsync(new ErrorResponse("You're not allowed to do that."));
     };
 });
 
@@ -188,12 +191,13 @@ accountRoutes.MapGet("/me", (ClaimsPrincipal user) => new MeResponse(user.Identi
 .WithSummary("Who is logged in")
 .WithDescription("The frontend calls this when the page opens. 401 means nobody is logged in.")
 .Produces<MeResponse>(StatusCodes.Status200OK)
-.Produces(StatusCodes.Status401Unauthorized);
+.Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
 
 // ---------- Tasks ----------
 // A group gives every endpoint inside it the same address prefix and the same Swagger heading.
 
-var taskRoutes = app.MapGroup("/tasks").WithTags("Tasks");
+// Login required: every task endpoint answers 401 without the login cookie.
+var taskRoutes = app.MapGroup("/tasks").WithTags("Tasks").RequireAuthorization();
 
 taskRoutes.MapGet("/", async (TodoListRepository repo) =>
 {
@@ -361,7 +365,8 @@ taskRoutes.MapDelete("/{id}", async (Guid id, TodoListRepository repo) =>
 
 // ---------- Routines ----------
 
-var routineRoutes = app.MapGroup("/routines").WithTags("Routines");
+// Login required: every routine endpoint answers 401 without the login cookie.
+var routineRoutes = app.MapGroup("/routines").WithTags("Routines").RequireAuthorization();
 
 routineRoutes.MapGet("/", async (RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {

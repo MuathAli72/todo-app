@@ -236,12 +236,18 @@ namespace TodoApp.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("_days")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("Days");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Routines", t =>
                         {
@@ -276,7 +282,13 @@ namespace TodoApp.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Tasks", t =>
                         {
@@ -341,6 +353,12 @@ namespace TodoApp.Api.Migrations
 
             modelBuilder.Entity("TodoApp.Core.Routine", b =>
                 {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.OwnsMany("TodoApp.Core.Completion", "Completions", b1 =>
                         {
                             b1.Property<Guid>("Id")
@@ -367,6 +385,15 @@ namespace TodoApp.Api.Migrations
                         });
 
                     b.Navigation("Completions");
+                });
+
+            modelBuilder.Entity("TodoApp.Core.TodoItem", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
