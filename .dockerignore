@@ -1,0 +1,10 @@
+# Files Docker should NOT copy into the root image (used by the Dockerfile at the repo root).
+**/node_modules
+**/dist
+**/bin
+**/obj
+**/*.user
+**/.env*
+.git
+deploy
+docs

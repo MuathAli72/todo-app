@@ -1,5 +1,6 @@
 # Frontend CI/CD: installs, scans, type-checks and builds the React frontend on GitHub's computers.
-# After a merge to main it also builds the live version and publishes it on GitHub Pages.
+# After a merge to main it publishes the frontend image to GHCR, and a "moved" page on GitHub Pages
+# (the live app is on Render now, together with the API).
 # What it does and how to fix a failure is in the runbook.
 
 name: Frontend CI
@@ -15,6 +16,7 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
+      - '.github/pages/**'
 
 # The pipeline only needs to read the code. Giving it the least access is safer.
 permissions:
@@ -57,11 +59,11 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    # Only after a merge to main (never on a pull request), and only if the checks above passed.
+    # The app itself now lives on Render (website + API on one address, so login works in
+    # every browser). GitHub Pages only shows a small "moved" page that sends people there.
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # This job needs a little more access than the rest of the pipeline:
     permissions:
       contents: read
       pages: write     # to publish on GitHub Pages
@@ -72,35 +74,14 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Get the code
         uses: actions/checkout@v6
 
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install packages
-        run: npm ci
-
-      # The live build differs from the laptop build in two ways:
-      # - VITE_API_URL points it at the API on Render instead of localhost.
-      # - --base makes file paths start with /<repo name>/, because that's where Pages serves the site.
-      - name: Build the live version
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
-        env:
-          VITE_API_URL: ${{ vars.API_URL }}
-
-      - name: Upload the built site
+      - name: Upload the "moved" page
         uses: actions/upload-pages-artifact@v5
         with:
-          path: frontend/dist
+          path: .github/pages
 
       - name: Publish on GitHub Pages
         id: deployment

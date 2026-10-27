@@ -17,6 +17,11 @@ on:
       - 'backend/**'
       - '.editorconfig'
       - '.github/workflows/backend.yml'
+      # The live site on Render is built from both folders (see the Dockerfile at the repo root),
+      # so a frontend change also needs a new Render deploy.
+      - 'frontend/**'
+      - 'Dockerfile'
+      - '.dockerignore'
 
 # The pipeline only needs to read the code. Giving it the least access is safer.
 permissions:
@@ -63,10 +68,15 @@ jobs:
       - name: Run tests
         run: dotnet test backend/TodoApp.slnx --no-build --configuration Release
 
-      # Builds the Docker container from backend/Dockerfile (the same recipe Render uses),
-      # so a broken Dockerfile is caught here instead of on the live server.
+      # Builds the API-only image (backend/Dockerfile, used by Kubernetes),
+      # so a broken Dockerfile is caught here instead of later.
       - name: Build Docker image
         run: docker build --tag todo-api backend
+
+      # The image Render runs: website + API in one (Dockerfile at the repo root).
+      # Built here too, so a broken one is caught before it reaches the live site.
+      - name: Build the Render image (website + API)
+        run: docker build --tag todo-render .
 
   deploy:
     name: Deploy to Render
@@ -109,7 +119,7 @@ jobs:
         env:
           ConnectionStrings__TodoDb: ${{ secrets.DATABASE_CONNECTION_STRING }}
 
-      # Presses Render's secret "deploy now" button. Render then builds backend/Dockerfile
+      # Presses Render's secret "deploy now" button. Render then builds the Dockerfile at the repo root
       # and swaps the new version in. Progress shows on the Render dashboard.
       - name: Tell Render to deploy
         run: curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null

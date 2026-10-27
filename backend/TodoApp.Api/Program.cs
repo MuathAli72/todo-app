@@ -65,6 +65,18 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 var app = builder.Build();
 
+// On Render, the website and the API share one address, and API calls start with /api
+// (e.g. /api/tasks). UsePathBase cuts "/api" off, so the endpoints below still match /tasks.
+// Requests without /api keep working too: Swagger, /health, and Kubernetes (its front door
+// already removes /api).
+app.UsePathBase("/api");
+// Must come right after UsePathBase, so routing sees the shortened address.
+app.UseRouting();
+
+// The website files. They only exist in the Render image (in wwwroot); elsewhere these do nothing.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -562,6 +574,10 @@ routineRoutes.MapDelete("/{id}/completions/{date}", async (Guid id, DateOnly dat
 .WithDescription("Date as YYYY-MM-DD in the address, like /routines/{id}/completions/2026-10-13.")
 .Produces(StatusCodes.Status204NoContent)
 .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+// Any other address that isn't an endpoint or a file gets the website's index.html,
+// so the React app loads. (Without the website files, this is just a 404.)
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
