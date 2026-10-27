@@ -1,0 +1,65 @@
+# The API: several identical copies, spread across nodes, plus one fixed address for them.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: { app: todo-api }
+  template:
+    metadata:
+      labels: { app: todo-api }
+    spec:
+      # Spread rule: copies on different nodes as evenly as possible.
+      # "Honor" = ignore nodes that don't take normal work (like the control-plane node).
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels: { app: todo-api }
+          # Only count copies of the SAME version when spreading. Without this, during an
+          # update the old copies are counted too, and the new ones can pile onto one node.
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: api
+          image: "{{ .Values.image.registry }}/todo-api:{{ .Values.api.tag }}"
+          ports:
+            - containerPort: 10000     # set in backend/Dockerfile
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.secret }}, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.secret }}, key: password }
+            # Same setting name the API reads on Render and in User Secrets.
+            - name: ConnectionStrings__TodoDb
+              value: "Host={{ .Values.database.host }};Port=5432;Database={{ .Values.database.name }};Username=$(DB_USER);Password=$(DB_PASSWORD)"
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          # "Can you take visitors?" If not, stop sending them here (don't kill it).
+          readinessProbe:
+            httpGet: { path: /health, port: 10000 }
+            periodSeconds: 5
+            failureThreshold: 3
+          # "Are you frozen?" If yes, restart it. Checks the API only, never the database.
+          livenessProbe:
+            httpGet: { path: /health, port: 10000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+---
+# One fixed address ("todo-api") for all copies.
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-api
+spec:
+  selector: { app: todo-api }
+  ports:
+    - port: 80
+      targetPort: 10000

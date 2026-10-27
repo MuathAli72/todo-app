@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using TodoApp.Core;
 
 /// <summary>
@@ -41,13 +42,23 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
         {
             // Days are stored as one text column, like "Monday,Wednesday,Friday".
             routine.Ignore(r => r.Days);
-            routine.Property<List<DayOfWeek>>("days")
+            // The days live in the private field _days. EF needs the field's exact name,
+            // and HasColumnName keeps the database column called "Days".
+            // Tells EF how to compare two day lists. Without it, EF only notices when the list
+            // is swapped for a new one, not when its contents change (warning 10620).
+            var daysComparer = new ValueComparer<List<DayOfWeek>>(
+                (a, b) => (a == null && b == null) || (a != null && b != null && a.SequenceEqual(b)),
+                list => list.Aggregate(0, (hash, day) => HashCode.Combine(hash, day)),
+                list => list.ToList());
+
+            routine.Property<List<DayOfWeek>>("_days")
                 .HasColumnName("Days")
                 .HasConversion(
                     days => string.Join(",", days),
                     text => text.Split(',', StringSplitOptions.RemoveEmptyEntries)
                                 .Select(d => Enum.Parse<DayOfWeek>(d))
-                                .ToList());
+                                .ToList(),
+                    daysComparer);
 
             // Ticks belong to their routine: loaded, saved and deleted with it.
             routine.OwnsMany(r => r.Completions, completion =>

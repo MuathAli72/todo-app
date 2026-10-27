@@ -1,0 +1,29 @@
+# Runs the database migrations ONCE, before anything else in this chart is installed or updated.
+# The "hook" lines below tell Helm to run it first and wait for it to finish.
+# If it fails, the install/upgrade stops and the old version keeps running.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: todo-migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    # Delete the previous run just before starting a new one (so its logs stay readable until then).
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3              # retry up to 3 times, then give up
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.registry }}/todo-migrate:{{ .Values.api.tag }}"
+          args: ["--connection", "$(CONNECTION_STRING)"]
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.secret }}, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.database.secret }}, key: password }
+            - name: CONNECTION_STRING
+              value: "Host={{ .Values.database.host }};Port=5432;Database={{ .Values.database.name }};Username=$(DB_USER);Password=$(DB_PASSWORD)"

@@ -1,0 +1,50 @@
+# The frontend: copies of the nginx box that hands out the website files.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels: { app: todo-web }
+  template:
+    metadata:
+      labels: { app: todo-web }
+    spec:
+      # Same spread rule as the API.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels: { app: todo-web }
+          # Only count copies of the SAME version when spreading. Without this, during an
+          # update the old copies are counted too, and the new ones can pile onto one node.
+          matchLabelKeys:
+            - pod-template-hash
+      containers:
+        - name: web
+          image: "{{ .Values.image.registry }}/todo-web:{{ .Values.web.tag }}"
+          ports:
+            - containerPort: 8080      # set in frontend/Dockerfile
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# One fixed address ("todo-web") for all copies.
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-web
+spec:
+  selector: { app: todo-web }
+  ports:
+    - port: 80
+      targetPort: 8080

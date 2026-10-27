@@ -195,8 +195,8 @@ public class RoutineTests
         var gym = Gym();
         var today = new DateOnly(2026, 10, 12);
 
-        
-        
+
+
         Assert.Throws<ArgumentException>(() => gym.Tick(new DateOnly(2026, 10, 5), today));
         Assert.Empty(gym.Completions);
     }
@@ -204,14 +204,14 @@ public class RoutineTests
     [Fact]
     public void Ticking_a_day_six_days_ago_still_works()
     {
-        
+
         var gym = Gym();
         var today = new DateOnly(2026, 10, 11);
 
-        
+
         gym.Tick(new DateOnly(2026, 10, 5), today);
 
-        
+
         Assert.True(gym.IsDoneOn(new DateOnly(2026, 10, 5)));
     }
 }

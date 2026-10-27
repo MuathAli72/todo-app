@@ -1,0 +1,156 @@
+# Backend CI/CD: restores, scans, builds and tests the .NET backend on GitHub's computers.
+# After a merge to main it also updates the live database, deploys the API to Render,
+# and publishes the API and migrations images to GitHub's image storage (GHCR).
+# What it does and how to fix a failure is in the runbook.
+
+name: Backend CI
+
+on:
+  # Every pull request into main. Always runs (no folder filter), because main is
+  # protected: GitHub waits for this check, and a check that never runs would block the merge.
+  pull_request:
+    branches: [main]
+  # Every push to main (that's what a merge is), but only when backend files changed.
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.editorconfig'
+      - '.github/workflows/backend.yml'
+
+# The pipeline only needs to read the code. Giving it the least access is safer.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore packages
+        run: dotnet restore backend/TodoApp.slnx
+
+      # Scanner: checks naming and formatting against the rules in .editorconfig.
+      # --verify-no-changes means "only report, don't fix". Any problem fails this step.
+      # To fix it on your computer, run the same command without --verify-no-changes.
+      - name: Scan naming and code style
+        run: dotnet format backend/TodoApp.slnx --verify-no-changes --no-restore --severity warn
+
+      # Release is the mode real deployments use, so that's what we check.
+      - name: Build
+        run: dotnet build backend/TodoApp.slnx --no-restore --configuration Release
+
+      # Checks that every change to the database model has a migration. If someone changes
+      # an entity but forgets "Add-Migration", this fails. Building the model also catches
+      # mapping mistakes (like the old _days crash) before they reach the live server.
+      # It never connects to a database; the connection string is only a placeholder.
+      - name: Check for missing migrations
+        run: |
+          dotnet tool install --global dotnet-ef --version '10.*'
+          dotnet ef migrations has-pending-model-changes --project backend/TodoApp.Api --configuration Release --no-build
+        env:
+          ConnectionStrings__TodoDb: Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder
+
+      # The tests don't need a database, so they run anywhere.
+      - name: Run tests
+        run: dotnet test backend/TodoApp.slnx --no-build --configuration Release
+
+      # Builds the Docker container from backend/Dockerfile (the same recipe Render uses),
+      # so a broken Dockerfile is caught here instead of on the live server.
+      - name: Build Docker image
+        run: docker build --tag todo-api backend
+
+  deploy:
+    name: Deploy to Render
+    # Only after a merge to main (never on a pull request), and only if build-and-test passed.
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # One deploy at a time: a newer deploy waits for the running one instead of overlapping it.
+    concurrency:
+      group: backend-deploy
+      cancel-in-progress: false
+    # Shows up under "Deployments" on GitHub, with a link to the live API.
+    environment:
+      name: production
+      url: ${{ vars.API_URL }}/health
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore packages
+        run: dotnet restore backend/TodoApp.slnx
+
+      # dotnet-ef is the command-line tool that applies migrations (like Update-Database in Visual Studio).
+      - name: Install the EF Core tool
+        run: |
+          dotnet tool install --global dotnet-ef --version '10.*'
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      # Updates the live database's tables BEFORE the new code goes live.
+      # If a migration fails, this step fails and the deploy below never happens.
+      # The connection string comes from the repo's secrets (hidden in the logs), under the
+      # same setting name the app uses on Render and in your User Secrets.
+      - name: Update the live database (migrations)
+        run: dotnet ef database update --project backend/TodoApp.Api
+        env:
+          ConnectionStrings__TodoDb: ${{ secrets.DATABASE_CONNECTION_STRING }}
+
+      # Presses Render's secret "deploy now" button. Render then builds backend/Dockerfile
+      # and swaps the new version in. Progress shows on the Render dashboard.
+      - name: Tell Render to deploy
+        run: curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+  publish-image:
+    name: Publish image
+    # Only after a merge to main, and only if build-and-test passed.
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Uploading to GitHub's image storage (GHCR) needs write access to "packages".
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Image names must be all lowercase.
+      IMAGE: ghcr.io/muathali72/todo-api
+      MIGRATE_IMAGE: ghcr.io/muathali72/todo-migrate
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      # Logs in with the token GitHub gives every run. No secret to set up.
+      - name: Log in to GitHub's image storage
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      # Two labels on the same image:
+      # - the commit ID, so every image points to exact code (and old ones stay reachable for rollback)
+      # - latest, as a shortcut to the newest one
+      - name: Build the image
+        run: docker build --tag "$IMAGE:${{ github.sha }}" --tag "$IMAGE:latest" backend
+
+      - name: Upload the image
+        run: docker push --all-tags "$IMAGE"
+
+      # The migrations helper comes from the same Dockerfile (the "migrate" stage).
+      # Same labels, so the API and its migrations always come from the same commit.
+      - name: Build the migrations image
+        run: docker build --target migrate --tag "$MIGRATE_IMAGE:${{ github.sha }}" --tag "$MIGRATE_IMAGE:latest" backend
+
+      - name: Upload the migrations image
+        run: docker push --all-tags "$MIGRATE_IMAGE"

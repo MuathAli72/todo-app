@@ -151,16 +151,16 @@ public class TodoItemTest
     [Fact]
     public void The_creation_day_counts()
     {
-            var routine = new Routine("Gym",
-            new[] { DayOfWeek.Wednesday, DayOfWeek.Sunday },
-            new TimeOnly(21, 0),
-            new DateOnly(2026, 10, 7));
+        var routine = new Routine("Gym",
+        new[] { DayOfWeek.Wednesday, DayOfWeek.Sunday },
+        new TimeOnly(21, 0),
+        new DateOnly(2026, 10, 7));
 
-        
+
         var thursday = new DateOnly(2026, 10, 8);
         var missed = routine.MissedDays(thursday);
 
-        
+
         Assert.Contains(new DateOnly(2026, 10, 7), missed);
     }
 

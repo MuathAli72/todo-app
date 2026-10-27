@@ -9,7 +9,7 @@ namespace TodoApp.Core;
 public class TodoList
 {
     // Private, so tasks can only be added or removed through the methods below.
-    private List<TodoItem> tasks = new();
+    private List<TodoItem> _tasks = new();
 
     /// <summary>Creates an empty list.</summary>
     public TodoList()
@@ -20,7 +20,7 @@ public class TodoList
     /// <param name="existingTasks">The tasks to start with. They're copied into a new list.</param>
     public TodoList(IEnumerable<TodoItem> existingTasks)
     {
-        tasks = existingTasks.ToList();
+        _tasks = existingTasks.ToList();
     }
 
     /// <summary>Creates a task and adds it to the list.</summary>
@@ -30,7 +30,7 @@ public class TodoList
     public TodoItem AddTask(string title)
     {
         var task = new TodoItem(title);
-        tasks.Add(task);
+        _tasks.Add(task);
         return task;
     }
 
@@ -38,12 +38,12 @@ public class TodoList
     /// <returns>true if it was removed. false if no task has that id.</returns>
     public bool DeleteTask(Guid id)
     {
-        var task = tasks.FirstOrDefault(t => t.Id == id);
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
         if (task == null)
         {
             return false;
         }
-        tasks.Remove(task);
+        _tasks.Remove(task);
         return true;
     }
 
@@ -51,7 +51,7 @@ public class TodoList
     /// <returns>true if it was found. false if no task has that id.</returns>
     public bool CompleteTask(Guid id)
     {
-        var task = tasks.FirstOrDefault(t => t.Id == id);
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
         if (task == null)
         {
             return false;
@@ -64,7 +64,7 @@ public class TodoList
     /// <returns>true if it was found. false if no task has that id.</returns>
     public bool ReopenTask(Guid id)
     {
-        var task = tasks.FirstOrDefault(t => t.Id == id);
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
         if (task == null)
         {
             return false;
@@ -78,7 +78,7 @@ public class TodoList
     /// <exception cref="ArgumentException">The priority isn't Low, Medium or High.</exception>
     public bool ChangePriority(Guid id, Priority newPriority)
     {
-        var task = tasks.FirstOrDefault(t => t.Id == id);
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
         if (task == null)
         {
             return false;
@@ -92,7 +92,7 @@ public class TodoList
     /// <exception cref="ArgumentException">A time was given without a date.</exception>
     public bool ChangeDueDate(Guid id, DateOnly? newDate, TimeOnly? newTime)
     {
-        var task = tasks.FirstOrDefault(t => t.Id == id);
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
         if (task == null)
         {
             return false;
@@ -106,7 +106,7 @@ public class TodoList
     /// <exception cref="ArgumentException">The new title is empty or only spaces.</exception>
     public bool EditTitle(Guid id, string newTitle)
     {
-        var task = tasks.FirstOrDefault(t => t.Id == id);
+        var task = _tasks.FirstOrDefault(t => t.Id == id);
         if (task == null)
         {
             return false;
@@ -116,5 +116,5 @@ public class TodoList
     }
 
     /// <summary>The tasks, read-only. Use the methods above to change them.</summary>
-    public IReadOnlyList<TodoItem> Tasks => tasks.AsReadOnly();
+    public IReadOnlyList<TodoItem> Tasks => _tasks.AsReadOnly();
 }

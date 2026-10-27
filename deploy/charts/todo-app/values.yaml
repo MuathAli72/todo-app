@@ -1,0 +1,43 @@
+# Settings for the to-do app. Change values here, not in templates/.
+
+# Where the images come from.
+image:
+  registry: ghcr.io/muathali72
+
+# Which version of each image to run: "latest", or a full commit ID from GitHub.
+# A commit ID runs that exact code; setting an older one is how you roll back.
+# The API and frontend have separate tags because CI only rebuilds the side that changed,
+# so a backend-only commit has no frontend image (and the other way round).
+# The migrations image always uses the API's tag (both are built from the same commit).
+
+# How the app reaches the database (from the todo-db chart).
+database:
+  host: todo-db-rw      # always points to the current primary
+  name: todo
+  secret: todo-db-app   # holds the username and password; the operator creates it
+
+# The front door. It's the only way in, so never fewer than 2.
+gateway:
+  replicas: 2
+
+# The website files (nginx). Light work; 2 so one survives if the other dies.
+web:
+  tag: latest
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+# The API. Takes the traffic; with 3, two stay up while one is being updated.
+api:
+  tag: latest
+  replicas: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi

@@ -34,7 +34,7 @@ public class TodoItem
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            throw new ArgumentException("Title required");
+            throw new ArgumentException("Please enter a title");
         }
         Title = title;
         IsDone = false;
@@ -71,7 +71,7 @@ public class TodoItem
     {
         if (newDate == null && newTime != null)
         {
-            throw new ArgumentException ( "A time needs a date");
+            throw new ArgumentException("A time needs a date");
         }
         DueDate = newDate;
         DueTime = newTime;
@@ -80,13 +80,13 @@ public class TodoItem
     /// <summary>Renames the task.</summary>
     /// <exception cref="ArgumentException">The new title is empty or only spaces.</exception>
     internal void EditTitle(string newTitle)
-{
-    if (string.IsNullOrWhiteSpace(newTitle))
     {
-        throw new ArgumentException("Title required");
+        if (string.IsNullOrWhiteSpace(newTitle))
+        {
+            throw new ArgumentException("Please enter a title");
+        }
+        Title = newTitle;
     }
-    Title = newTitle;
-}
-   
+
 
 }

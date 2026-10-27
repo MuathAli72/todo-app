@@ -236,7 +236,7 @@ namespace TodoApp.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("days")
+                    b.Property<string>("_days")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("Days");

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: todo-db
+description: PostgreSQL for the to-do app (1 primary + backups), run by the CloudNativePG operator.
+type: application
+version: 0.1.0

@@ -8,19 +8,19 @@ using TodoApp.Core;
 /// </remarks>
 public class TodoListRepository
 {
-    private readonly TodoDbContext db;
+    private readonly TodoDbContext _db;
 
     /// <summary>Creates the repository. ASP.NET Core passes in the database context for the current request.</summary>
     public TodoListRepository(TodoDbContext db)
     {
-        this.db = db;
+        this._db = db;
     }
 
     /// <summary>Loads every task, oldest first, as one <see cref="TodoList"/>.</summary>
     /// <remarks>Simple, but it loads all tasks even to change one. Fine for one person's list.</remarks>
     public async Task<TodoList> LoadAsync()
     {
-        var tasks = await db.Tasks.OrderBy(t => t.CreatedAt).ToListAsync();
+        var tasks = await _db.Tasks.OrderBy(t => t.CreatedAt).ToListAsync();
         return new TodoList(tasks);
     }
 
@@ -36,22 +36,22 @@ public class TodoListRepository
         // A task EF has never seen ("Detached") was just made by AddTask, so insert it.
         foreach (var task in list.Tasks)
         {
-            if (db.Entry(task).State == EntityState.Detached)
+            if (_db.Entry(task).State == EntityState.Detached)
             {
-                db.Tasks.Add(task);
+                _db.Tasks.Add(task);
             }
         }
 
         // A task EF loaded (db.Tasks.Local) that's no longer in the list was deleted, so delete its row.
         // ToList() makes a copy first, because you can't remove items from a collection while looping over it.
-        foreach (var task in db.Tasks.Local.ToList())
+        foreach (var task in _db.Tasks.Local.ToList())
         {
             if (!list.Tasks.Contains(task))
             {
-                db.Tasks.Remove(task);
+                _db.Tasks.Remove(task);
             }
         }
 
-        await db.SaveChangesAsync();
+        await _db.SaveChangesAsync();
     }
 }

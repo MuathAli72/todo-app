@@ -1,0 +1,138 @@
+# Frontend CI/CD: installs, scans, type-checks and builds the React frontend on GitHub's computers.
+# After a merge to main it also builds the live version and publishes it on GitHub Pages.
+# What it does and how to fix a failure is in the runbook.
+
+name: Frontend CI
+
+on:
+  # Every pull request into main. Always runs (no folder filter), because main is
+  # protected: GitHub waits for this check, and a check that never runs would block the merge.
+  pull_request:
+    branches: [main]
+  # Every push to main (that's what a merge is), but only when frontend files changed.
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+
+# The pipeline only needs to read the code. Giving it the least access is safer.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Type-check and build
+    runs-on: ubuntu-latest
+    # Every "run" step below starts inside the frontend folder.
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          # Reuses downloaded packages between runs, so installs are faster.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci installs exactly what package-lock.json says, nothing newer.
+      # Same packages on every machine, so "works on my machine" can't happen.
+      - name: Install packages
+        run: npm ci
+
+      # Scanner: ESLint checks code quality and the naming rules in eslint.config.js.
+      # --max-warnings 0 means warnings fail the run too, so they can't pile up.
+      - name: Scan naming and code quality
+        run: npm run lint -- --max-warnings 0
+
+      # "build" runs the TypeScript checker (tsc -b) first, then Vite.
+      # Any type error fails this step.
+      - name: Type-check and build
+        run: npm run build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    # Only after a merge to main (never on a pull request), and only if the checks above passed.
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # This job needs a little more access than the rest of the pipeline:
+    permissions:
+      contents: read
+      pages: write     # to publish on GitHub Pages
+      id-token: write  # to prove to Pages that this run is allowed to publish
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install packages
+        run: npm ci
+
+      # The live build differs from the laptop build in two ways:
+      # - VITE_API_URL points it at the API on Render instead of localhost.
+      # - --base makes file paths start with /<repo name>/, because that's where Pages serves the site.
+      - name: Build the live version
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
+        env:
+          VITE_API_URL: ${{ vars.API_URL }}
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/dist
+
+      - name: Publish on GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  publish-image:
+    name: Publish image
+    # Only after a merge to main, and only if the checks above passed.
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Uploading to GitHub's image storage (GHCR) needs write access to "packages".
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Image names must be all lowercase.
+      IMAGE: ghcr.io/muathali72/todo-web
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v6
+
+      # Logs in with the token GitHub gives every run. No secret to set up.
+      - name: Log in to GitHub's image storage
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      # Two labels on the same image:
+      # - the commit ID, so every image points to exact code (and old ones stay reachable for rollback)
+      # - latest, as a shortcut to the newest one
+      # The Dockerfile itself sets VITE_API_URL=/api, so this image works behind the front door.
+      - name: Build the image
+        run: docker build --tag "$IMAGE:${{ github.sha }}" --tag "$IMAGE:latest" frontend
+
+      - name: Upload the image
+        run: docker push --all-tags "$IMAGE"

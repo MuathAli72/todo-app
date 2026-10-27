@@ -1,0 +1,5 @@
+# Folders Docker should never copy into the container.
+# bin and obj are build leftovers from your laptop: they're big, and they're for Windows, not Linux.
+**/bin
+**/obj
+**/*.user

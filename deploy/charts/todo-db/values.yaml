@@ -1,0 +1,24 @@
+# Settings for the to-do app's database. Change values here, not in templates/.
+
+# The database cluster's name. The operator builds the other names from it:
+#   <name>-rw  = address that always points to the primary (the app uses this)
+#   <name>-app = the secret holding the username and password
+name: todo-db
+
+# How many copies: 1 primary + the rest are backups that take over if it dies.
+instances: 2
+
+# Disk space for the data, per copy.
+storageSize: 1Gi
+
+# The database and the user that owns it.
+database: todo
+owner: todo
+
+# Reserve at least "requests"; never use more than "limits".
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

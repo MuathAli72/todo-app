@@ -1,6 +1,6 @@
-using FluentValidation;
 using System.Data;
 using System.Security.Cryptography.X509Certificates;
+using FluentValidation;
 
 // FluentValidation checks the shape of each request before the domain sees it,
 // so bad input gets a clear 400 message. The domain (TodoApp.Core) still has its own rules:
@@ -16,7 +16,7 @@ public class CreateTaskRequestValidator : AbstractValidator<CreateTaskRequest>
             .WithMessage("Please enter a title.");
     }
 
-  
+
 }
 
 /// <summary>Checks a rename (tasks and routines): the title can't be empty or only spaces.</summary>
