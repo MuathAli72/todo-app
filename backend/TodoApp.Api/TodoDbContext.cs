@@ -22,15 +22,18 @@ using TodoApp.Core;
 /// </remarks>
 public class TodoDbContext : IdentityDbContext<IdentityUser>
 {
-    // The logged-in user's id for this request, read from the login cookie.
-    // null when nobody is logged in: then the filter matches no rows at all.
-    private readonly string? _currentUserId;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     /// <summary>ASP.NET Core passes in the options (which database) and the current request.</summary>
     public TodoDbContext(DbContextOptions<TodoDbContext> options, IHttpContextAccessor httpContextAccessor) : base(options)
     {
-        _currentUserId = httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        _httpContextAccessor = httpContextAccessor;
     }
+
+    // The logged-in user's id, read fresh every time it's used (not once at the start),
+    // because the login system can create this context before it knows who the user is.
+    // null when nobody is logged in: then the filter matches no rows at all.
+    private string? CurrentUserId => _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
     /// <summary>The Tasks table.</summary>
     public DbSet<TodoItem> Tasks => Set<TodoItem>();
@@ -53,7 +56,7 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
             task.HasOne<IdentityUser>().WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade);
             task.HasIndex("UserId");
             // The global filter. Added to every query on Tasks.
-            task.HasQueryFilter(t => EF.Property<string>(t, "UserId") == _currentUserId);
+            task.HasQueryFilter(t => EF.Property<string>(t, "UserId") == CurrentUserId);
         });
         modelBuilder.Entity<Routine>(routine =>
         {
@@ -61,7 +64,7 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
             routine.HasOne<IdentityUser>().WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade);
             routine.HasIndex("UserId");
             // The global filter. Added to every query on Routines (their ticks come along with them).
-            routine.HasQueryFilter(r => EF.Property<string>(r, "UserId") == _currentUserId);
+            routine.HasQueryFilter(r => EF.Property<string>(r, "UserId") == CurrentUserId);
         });
 
         modelBuilder.Entity<TodoItem>().ToTable(t =>
@@ -132,7 +135,7 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
         {
             if (entry.State == EntityState.Added && entry.Entity is TodoItem or Routine)
             {
-                entry.Property("UserId").CurrentValue = _currentUserId
+                entry.Property("UserId").CurrentValue = CurrentUserId
                     ?? throw new InvalidOperationException("Can't save a task or routine without a logged-in user.");
             }
         }

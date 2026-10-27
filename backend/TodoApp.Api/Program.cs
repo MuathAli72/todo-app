@@ -588,3 +588,6 @@ public record MeResponse(string Email);
 
 // Every error answer (400, 401, 404, 429) has this shape: { "error": "..." }. Naming it lets Swagger show it.
 public record ErrorResponse(string Error);
+
+// Lets the integration tests start this API in memory.
+public partial class Program { }
