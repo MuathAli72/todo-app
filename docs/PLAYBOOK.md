@@ -84,10 +84,13 @@ part of it crashes, a machine goes down, or a new version is being rolled out.
 - This runs on **one PC** with 3 simulated nodes (kind, inside Docker Desktop). It survives a copy
   crashing or a node going away, but if the PC or Docker Desktop stops, everything stops. A real
   company runs the same charts on separate physical machines.
-- **Database failover is automatic, but not instant.** With no app connected, deleting the primary
-  switched over in about 3 seconds. **With the API connected, it took about 2 minutes**: requests
-  flickered between OK and FAIL until the backup took over. Being investigated (see the roadmap);
-  until then, expect up to a few minutes of errors when the primary dies.
+- **Database failover is automatic, but not instant.** Measured with the watcher while the API was
+  connected: a simulated crash of the primary (force delete) caused **about 20 seconds of errors**,
+  then the backup took over as primary.
+- **A normal `kubectl delete pod` on the primary is slow on purpose.** The primary shuts down
+  politely (waits for connections and data syncing; up to 30 minutes by default), and the
+  CloudNativePG docs warn against deleting the primary pod. For planned moves, use a switchover
+  (`kubectl cnpg promote`, needs the cnpg kubectl plugin) instead.
 - **`kubectl port-forward` is a test tool** that connects to one single pod. If that pod moves, the
   tunnel dies even though the app is fine. In production, a load balancer sits in front of both
   front-door copies instead.
@@ -184,7 +187,7 @@ while ($true) { try { Invoke-WebRequest http://localhost:8888/api/tasks -UseBasi
 | Drill | Command | Expected |
 |---|---|---|
 | Kill an API copy | `$p = kubectl get pods -l app=todo-api -o jsonpath='{.items[0].metadata.name}'; kubectl delete pod $p` | All OK; Kubernetes starts a replacement |
-| Kill the DB primary | `$primary = kubectl get cluster todo-db -o jsonpath='{.status.currentPrimary}'; kubectl delete pod $primary` | A few seconds of FAIL, then OK; the backup is now primary |
+| Crash the DB primary | `$primary = kubectl get cluster todo-db -o jsonpath='{.status.currentPrimary}'; kubectl delete pod $primary --grace-period=0 --force` | About 20 seconds of FAIL, then OK; the backup is now primary (test data only: a forced crash can lose the last few writes) |
 | Take a node away | see below | Mostly OK (the tunnel reconnects if its pod moved) |
 
 Take a node away: drain the worker that does **not** hold the DB primary (the operator protects the primary from being moved by a drain):
