@@ -52,3 +52,13 @@ export const DateInputSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 
 /** A title the user typed. It can't be empty or only spaces. Same message as the server. */
 export const TitleInputSchema = z.string().trim().min(1, 'Please enter a title.')
+
+/** Who is logged in, from GET /account/me. */
+export const MeSchema = z.object({
+  email: z.string(),
+})
+
+/** Every error the server sends has this shape: { "error": "..." }. */
+export const ErrorSchema = z.object({
+  error: z.string(),
+})
