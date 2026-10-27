@@ -7,6 +7,12 @@ A to-do app with one-off **tasks** and repeating **routines**, built to practice
 - **Database:** PostgreSQL, through Entity Framework Core
 - **Validation:** Zod (frontend), FluentValidation (API), domain rules, database constraints
 - **API docs:** OpenAPI, with Swagger UI for trying every endpoint in the browser
+- **CI/CD:** GitHub Actions: naming scanners, tests, and automatic deploys
+- **Containers:** Docker images on GHCR, run on Kubernetes with Helm
+
+**Live:** [site](https://muathali72.github.io/todo-app/) · [API health](https://todo-app-yaw8.onrender.com/health) (free plan: the first request after 15 idle minutes takes about a minute)
+
+**Docs for teammates:** [Runbook (CI/CD)](docs/RUNBOOK.md) · [Playbook (Kubernetes deployment)](docs/PLAYBOOK.md)
 
 ## What the app does
 
@@ -276,6 +282,28 @@ npm run dev
 Then open the address it prints, usually `http://localhost:5173`.
 
 **Tests:** Test Explorer in Visual Studio, or `dotnet test` in `backend`.
+
+## Deployment
+
+### CI/CD (GitHub Actions)
+
+Every pull request runs two checks, and `main` is protected, so nothing merges until both pass. With auto-merge on, a PR merges by itself once they are green.
+
+| Pipeline | On every PR | After a merge to `main` |
+|---|---|---|
+| Backend | Naming/style scanner (`dotnet format`), build, missing-migration check, tests, Docker build | Updates the live database, deploys the API to Render, publishes `todo-api` and `todo-migrate` images to GHCR |
+| Frontend | Naming/quality scanner (ESLint), type-check, build | Deploys to GitHub Pages, publishes the `todo-web` image to GHCR |
+
+Images are tagged with the commit ID (exact code, easy rollback) and `latest`. GitHub emails on success and failure. Details and troubleshooting: [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
+### Kubernetes (high availability)
+
+The same app also runs on a local 3-node Kubernetes cluster (kind, in Docker Desktop), installed with two Helm charts in `deploy/charts/`:
+
+- **todo-db:** PostgreSQL with a primary and a backup, run by the CloudNativePG operator. The backup is promoted automatically if the primary dies.
+- **todo-app:** a front door (Envoy Gateway: `/api` goes to the API, everything else to the frontend), 3 API copies, 2 frontend copies, and a migrations job that runs once before each update.
+
+Copies are spread across nodes, health checks restart frozen copies, and updates replace copies one at a time with no downtime. To change anything, edit a chart's `values.yaml`. Why it's built this way, and how to install, update, roll back and test failures: [docs/PLAYBOOK.md](docs/PLAYBOOK.md).
 
 ## Future ideas
 

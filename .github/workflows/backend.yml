@@ -48,6 +48,17 @@ jobs:
       - name: Build
         run: dotnet build backend/TodoApp.slnx --no-restore --configuration Release
 
+      # Checks that every change to the database model has a migration. If someone changes
+      # an entity but forgets "Add-Migration", this fails. Building the model also catches
+      # mapping mistakes (like the old _days crash) before they reach the live server.
+      # It never connects to a database; the connection string is only a placeholder.
+      - name: Check for missing migrations
+        run: |
+          dotnet tool install --global dotnet-ef --version '10.*'
+          dotnet ef migrations has-pending-model-changes --project backend/TodoApp.Api --configuration Release --no-build
+        env:
+          ConnectionStrings__TodoDb: Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder
+
       # The tests don't need a database, so they run anywhere.
       - name: Run tests
         run: dotnet test backend/TodoApp.slnx --no-build --configuration Release
