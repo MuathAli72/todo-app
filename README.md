@@ -10,7 +10,7 @@ A to-do app with one-off **tasks** and repeating **routines**, built to practice
 - **CI/CD:** GitHub Actions: naming scanners, tests, and automatic deploys
 - **Containers:** Docker images on GHCR, run on Kubernetes with Helm
 
-**Live:** [site](https://muathali72.github.io/todo-app/) · [API health](https://todo-app-yaw8.onrender.com/health) (free plan: the first request after 15 idle minutes takes about a minute)
+**Live:** [todo-app-yaw8.onrender.com](https://todo-app-yaw8.onrender.com/) (free plan: the first visit after 15 idle minutes takes about a minute while the server wakes up). Create an account to start; each person sees only their own tasks and routines.
 
 **Docs for teammates:** [Runbook (CI/CD)](docs/RUNBOOK.md) · [Playbook (Kubernetes deployment)](docs/PLAYBOOK.md)
 
@@ -244,7 +244,6 @@ Written before the code. The tests are built from them.
 ## Known limitations, on purpose
 
 - **No reminders or notifications.** A routine's time is shown, but nothing happens at that time yet.
-- **No accounts.** There's one shared list. A multi-user version would load and save per user.
 - **Changing a routine's days restarts its missed-day tracking.** Past ticks are kept, but days before the change are no longer judged.
 - **A late tick can't be undone from the page.** Once a missed day is ticked, its button disappears. The history view (below) would fix this.
 - **Without the `X-Time-Zone` header, "today" comes from the server's clock.** The app always sends it. The fallback is only there for quick tests.
@@ -291,10 +290,14 @@ Every pull request runs two checks, and `main` is protected, so nothing merges u
 
 | Pipeline | On every PR | After a merge to `main` |
 |---|---|---|
-| Backend | Naming/style scanner (`dotnet format`), build, missing-migration check, tests, Docker build | Updates the live database, deploys the API to Render, publishes `todo-api` and `todo-migrate` images to GHCR |
-| Frontend | Naming/quality scanner (ESLint), type-check, build | Deploys to GitHub Pages, publishes the `todo-web` image to GHCR |
+| Backend | Naming/style scanner (`dotnet format`), build, missing-migration check, tests (including Testcontainers tests against a real Postgres), Docker builds | Updates the live database, deploys the website + API to Render, publishes `todo-api` and `todo-migrate` images to GHCR |
+| Frontend | Naming/quality scanner (ESLint), type-check, build | Publishes the `todo-web` image to GHCR (the live site itself is deployed to Render by the backend pipeline) |
 
 Images are tagged with the commit ID (exact code, easy rollback) and `latest`. GitHub emails on success and failure. Details and troubleshooting: [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
+### Live hosting (Render)
+
+The website and the API run as **one service on one address**: the React files are built into the API's image and served by ASP.NET, and API calls go to `/api/...`. One address means the login cookie is a normal same-site cookie, which no browser blocks (two different sites would need a cross-site cookie, which Safari and others block). The image is built from the `Dockerfile` at the repo root. The old GitHub Pages address now only shows a "moved" page.
 
 ### Kubernetes (high availability)
 
@@ -312,4 +315,3 @@ Copies are spread across nodes, health checks restart frozen copies, and updates
 - **Schedule history.** Save every change to a routine's days, so stats and missed days stay accurate across changes. This pays back the shortcut described under "Design decisions."
 - **Undo or a trash bin** for deletes, instead of a confirm step.
 - **Reminders** using a routine's time.
-- **Accounts,** so each person has their own list.

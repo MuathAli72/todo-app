@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using FluentValidation;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -11,6 +13,8 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TodoDb")));
 builder.Services.AddScoped<TodoListRepository>();
 builder.Services.AddScoped<RoutineRepository>();
+// Lets TodoDbContext read who is logged in for the current request (for the per-user filter).
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
 // A simple "are you alive?" check. Render and the CD pipeline call /health after a deploy.
 builder.Services.AddHealthChecks();
@@ -20,7 +24,58 @@ builder.Services.AddHealthChecks();
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:5173"];
 
+// ---------- Accounts (ASP.NET Core Identity, with a login cookie) ----------
+// Identity does the risky parts: password hashing, lockout, and the login cookie.
+// Users are stored in the same Postgres database, through TodoDbContext.
+builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+    .AddIdentityCookies();
+builder.Services.AddAuthorization();
+builder.Services.AddIdentityCore<IdentityUser>(options =>
+    {
+        // Length over symbols: at least 8 characters, no forced capitals or symbols.
+        // That's current guidance (NIST), and easier for people to remember.
+        options.Password.RequiredLength = 8;
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.User.RequireUniqueEmail = true;
+        // 5 wrong passwords in a row locks the account for 5 minutes (Identity's defaults).
+    })
+    .AddEntityFrameworkStores<TodoDbContext>()
+    .AddSignInManager();
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    // Stay logged in for 14 days. Each visit pushes that back (sliding expiry).
+    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    // An API answers 401/403. Without these, the cookie would try to redirect
+    // to a login web page that doesn't exist.
+    // They also send the usual { "error": "..." } shape, so the frontend can show the message.
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return context.Response.WriteAsJsonAsync(new ErrorResponse("Please log in first."));
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return context.Response.WriteAsJsonAsync(new ErrorResponse("You're not allowed to do that."));
+    };
+});
+
 var app = builder.Build();
+
+// On Render, the website and the API share one address, and API calls start with /api
+// (e.g. /api/tasks). UsePathBase cuts "/api" off, so the endpoints below still match /tasks.
+// Requests without /api keep working too: Swagger, /health, and Kubernetes (its front door
+// already removes /api).
+app.UsePathBase("/api");
+// Must come right after UsePathBase, so routing sees the shortened address.
+app.UseRouting();
+
+// The website files. They only exist in the Render image (in wwwroot); elsewhere these do nothing.
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 if (app.Environment.IsDevelopment())
 {
@@ -31,7 +86,14 @@ if (app.Environment.IsDevelopment())
 app.UseCors(policy => policy
     .WithOrigins(allowedOrigins)
     .AllowAnyMethod()
-    .AllowAnyHeader());
+    .AllowAnyHeader()
+    // Lets the browser send the login cookie to this API from the frontend's address.
+    .AllowCredentials());
+
+// Reads the login cookie on every request, then checks who's allowed where.
+// The order matters: first "who are you", then "are you allowed".
+app.UseAuthentication();
+app.UseAuthorization();
 
 // "Today" for the user, not for the server. The browser sends its time zone (like "Asia/Riyadh")
 // in the X-Time-Zone header. We take the real time (UTC) and convert it to that zone.
@@ -61,10 +123,93 @@ static IResult RoutineNotFound() => Results.NotFound(new ErrorResponse("That rou
 
 app.MapHealthChecks("/health");
 
+// ---------- Account ----------
+
+var accountRoutes = app.MapGroup("/account").WithTags("Account");
+
+accountRoutes.MapPost("/register", async (RegisterRequest request, IValidator<RegisterRequest> validator, UserManager<IdentityUser> users, SignInManager<IdentityUser> signIn) =>
+{
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
+    }
+
+    // A friendlier message than Identity's "Username '...' is already taken".
+    if (await users.FindByEmailAsync(request.Email) != null)
+    {
+        return Results.BadRequest(new ErrorResponse("An account with this email already exists."));
+    }
+
+    // The email doubles as the user name, so people log in with their email.
+    var user = new IdentityUser { UserName = request.Email, Email = request.Email };
+    // Identity checks the password rules, hashes the password and saves the user.
+    var created = await users.CreateAsync(user, request.Password);
+    if (!created.Succeeded)
+    {
+        return Results.BadRequest(new ErrorResponse(created.Errors.First().Description));
+    }
+
+    // Log the new user in straight away, so they don't have to type it all again.
+    await signIn.SignInAsync(user, isPersistent: true);
+    return Results.Created("/account/me", new MeResponse(request.Email));
+})
+.WithSummary("Create an account and log in")
+.WithDescription("The password needs at least 8 characters. Sets the login cookie.")
+.Produces<MeResponse>(StatusCodes.Status201Created)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+accountRoutes.MapPost("/login", async (LoginRequest request, IValidator<LoginRequest> validator, SignInManager<IdentityUser> signIn) =>
+{
+    var result = validator.Validate(request);
+    if (!result.IsValid)
+    {
+        return Results.BadRequest(new ErrorResponse(result.Errors[0].ErrorMessage));
+    }
+
+    // isPersistent: the cookie survives closing the browser.
+    // lockoutOnFailure: wrong passwords count toward the lockout.
+    var signedIn = await signIn.PasswordSignInAsync(request.Email, request.Password, isPersistent: true, lockoutOnFailure: true);
+    if (signedIn.IsLockedOut)
+    {
+        return Results.Json(new ErrorResponse("Too many wrong tries. Wait a few minutes."), statusCode: StatusCodes.Status429TooManyRequests);
+    }
+    if (!signedIn.Succeeded)
+    {
+        // Same message for a wrong email and a wrong password,
+        // so nobody can use this to find out which emails have accounts.
+        return Results.Json(new ErrorResponse("Wrong email or password."), statusCode: StatusCodes.Status401Unauthorized);
+    }
+    return Results.NoContent();
+})
+.WithSummary("Log in")
+.WithDescription("Sets the login cookie. The browser sends it with every request after that.")
+.Produces(StatusCodes.Status204NoContent)
+.Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+.Produces<ErrorResponse>(StatusCodes.Status401Unauthorized)
+.Produces<ErrorResponse>(StatusCodes.Status429TooManyRequests);
+
+accountRoutes.MapPost("/logout", async (SignInManager<IdentityUser> signIn) =>
+{
+    await signIn.SignOutAsync();
+    return Results.NoContent();
+})
+.WithSummary("Log out")
+.WithDescription("Removes the login cookie. Safe to call even when not logged in.")
+.Produces(StatusCodes.Status204NoContent);
+
+accountRoutes.MapGet("/me", (ClaimsPrincipal user) => new MeResponse(user.Identity!.Name!))
+.RequireAuthorization()
+.WithSummary("Who is logged in")
+.WithDescription("The frontend calls this when the page opens. 401 means nobody is logged in.")
+.Produces<MeResponse>(StatusCodes.Status200OK)
+.Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
+
 // ---------- Tasks ----------
 // A group gives every endpoint inside it the same address prefix and the same Swagger heading.
 
-var taskRoutes = app.MapGroup("/tasks").WithTags("Tasks");
+// Login required: every task endpoint answers 401 without the login cookie.
+var taskRoutes = app.MapGroup("/tasks").WithTags("Tasks").RequireAuthorization();
 
 taskRoutes.MapGet("/", async (TodoListRepository repo) =>
 {
@@ -232,7 +377,8 @@ taskRoutes.MapDelete("/{id}", async (Guid id, TodoListRepository repo) =>
 
 // ---------- Routines ----------
 
-var routineRoutes = app.MapGroup("/routines").WithTags("Routines");
+// Login required: every routine endpoint answers 401 without the login cookie.
+var routineRoutes = app.MapGroup("/routines").WithTags("Routines").RequireAuthorization();
 
 routineRoutes.MapGet("/", async (RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {
@@ -429,6 +575,10 @@ routineRoutes.MapDelete("/{id}/completions/{date}", async (Guid id, DateOnly dat
 .Produces(StatusCodes.Status204NoContent)
 .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+// Any other address that isn't an endpoint or a file gets the website's index.html,
+// so the React app loads. (Without the website files, this is just a 404.)
+app.MapFallbackToFile("index.html");
+
 app.Run();
 
 public record CreateTaskRequest(string Title);
@@ -448,6 +598,12 @@ public record RoutineResponse(
 public record ChangeDaysRequest(List<string> Days);
 public record ChangeTimeRequest(string? Time);
 public record TickRequest(string Date);
+public record RegisterRequest(string Email, string Password);
+public record LoginRequest(string Email, string Password);
+public record MeResponse(string Email);
 
-// Every error answer (400 and 404) has this shape: { "error": "..." }. Naming it lets Swagger show it.
+// Every error answer (400, 401, 404, 429) has this shape: { "error": "..." }. Naming it lets Swagger show it.
 public record ErrorResponse(string Error);
+
+// Lets the integration tests start this API in memory.
+public partial class Program { }
