@@ -10,6 +10,17 @@
   opacity: 0.8;
 }
 
+.history-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 4px 0;
+}
+
+.history-stats strong {
+  font-size: 1.15em;
+}
+
 .history-days {
   display: flex;
   flex-wrap: wrap;
@@ -21,7 +32,7 @@
   width: 16px;
   height: 16px;
   padding: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   border: 1px solid transparent;
   background: transparent;
   vertical-align: middle;
@@ -33,11 +44,11 @@
 
 /* Same color meanings as the rest of the app: green done, yellow missed. */
 .history-day.done {
-  background: #46a758;
+  background: var(--done);
 }
 
 .history-day.missed {
-  background: #e5a000;
+  background: var(--warn);
 }
 
 .history-day.pending {
