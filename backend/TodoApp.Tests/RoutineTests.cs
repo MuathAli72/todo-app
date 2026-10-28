@@ -1,4 +1,4 @@
-﻿using TodoApp.Core;
+using TodoApp.Core;
 using Xunit;
 
 public class RoutineTests
@@ -213,5 +213,132 @@ public class RoutineTests
 
 
         Assert.True(gym.IsDoneOn(new DateOnly(2026, 10, 5)));
+    }
+
+    // ----- Schedule history -----
+
+    [Fact]
+    public void Changing_days_keeps_misses_from_the_old_schedule()
+    {
+        // Gym was Mon/Wed/Fri. Monday Oct 5 was skipped. On Wednesday the days change to Tue/Thu.
+        var gym = Gym();
+        var wednesday = new DateOnly(2026, 10, 7);
+        gym.ChangeDays(new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday }, wednesday);
+
+        // Monday was a gym day back then, so it's still missed.
+        Assert.Contains(new DateOnly(2026, 10, 5), gym.MissedDays(wednesday));
+    }
+
+    [Fact]
+    public void A_day_from_the_old_schedule_can_still_be_ticked_late()
+    {
+        var gym = Gym();
+        var wednesday = new DateOnly(2026, 10, 7);
+        gym.ChangeDays(new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday }, wednesday);
+
+        gym.Tick(new DateOnly(2026, 10, 5), wednesday);
+
+        Assert.True(gym.IsDoneOn(new DateOnly(2026, 10, 5)));
+    }
+
+    [Fact]
+    public void The_new_days_count_from_the_change_onwards()
+    {
+        var gym = Gym();
+        var wednesday = new DateOnly(2026, 10, 7);
+        gym.ChangeDays(new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday }, wednesday);
+
+        Assert.False(gym.IsScheduledOn(new DateOnly(2026, 10, 6))); // Tuesday before the change
+        Assert.True(gym.IsScheduledOn(new DateOnly(2026, 10, 8))); // Thursday after the change
+        Assert.False(gym.IsScheduledOn(new DateOnly(2026, 10, 9))); // Friday after the change
+    }
+
+    [Fact]
+    public void Changing_days_twice_on_one_day_keeps_one_schedule_for_that_day()
+    {
+        var gym = Gym();
+        var wednesday = new DateOnly(2026, 10, 7);
+        gym.ChangeDays(new[] { DayOfWeek.Tuesday }, wednesday);
+        gym.ChangeDays(new[] { DayOfWeek.Thursday }, wednesday);
+
+        Assert.Equal(2, gym.Schedules.Count);
+        Assert.Equal(new[] { DayOfWeek.Thursday }, gym.DaysOn(wednesday));
+    }
+
+    // ----- History -----
+
+    [Fact]
+    public void History_shows_each_day_oldest_first()
+    {
+        // Gym created Thu Oct 1 (Mon/Wed/Fri). Today is Wed Oct 7. Monday Oct 5 was ticked.
+        var gym = Gym();
+        var today = new DateOnly(2026, 10, 7);
+        gym.Tick(new DateOnly(2026, 10, 5), today);
+
+        var history = gym.History(today, 8);
+
+        Assert.Equal(8, history.Count);
+        Assert.Equal(new DateOnly(2026, 9, 30), history[0].Date);
+        Assert.Equal(DayStatus.NotStarted, history[0].Status); // Sep 30, before it existed
+        Assert.Equal(DayStatus.Missed, history[2].Status); // Fri Oct 2
+        Assert.Equal(DayStatus.Off, history[3].Status); // Sat Oct 3
+        Assert.Equal(DayStatus.Done, history[5].Status); // Mon Oct 5
+        Assert.Equal(DayStatus.Pending, history[7].Status); // today, not ticked yet
+    }
+
+    [Fact]
+    public void Only_missed_days_inside_the_window_can_be_ticked_from_history()
+    {
+        var gym = Gym();
+        var today = new DateOnly(2026, 10, 12); // Monday
+
+        var history = gym.History(today, 12);
+
+        // Fri Oct 2 is 10 days ago: missed, but too old to tick.
+        var friday = history.Single(d => d.Date == new DateOnly(2026, 10, 2));
+        Assert.Equal(DayStatus.Missed, friday.Status);
+        Assert.False(friday.CanTick);
+        // Fri Oct 9 is 3 days ago: can still be ticked.
+        Assert.True(history.Single(d => d.Date == new DateOnly(2026, 10, 9)).CanTick);
+    }
+
+    // ----- Streaks -----
+
+    [Fact]
+    public void Days_off_do_not_break_a_streak()
+    {
+        // Mon/Wed/Fri. Mon 5, Wed 7 and Fri 9 were ticked. Today is Sat Oct 10.
+        var gym = Gym();
+        var today = new DateOnly(2026, 10, 10);
+        foreach (var day in new[] { 5, 7, 9 })
+        {
+            gym.Tick(new DateOnly(2026, 10, day), today);
+        }
+
+        Assert.Equal(3, gym.CurrentStreak(today));
+    }
+
+    [Fact]
+    public void Today_not_ticked_yet_does_not_break_the_streak()
+    {
+        var gym = Gym();
+        var monday = new DateOnly(2026, 10, 12);
+        gym.Tick(new DateOnly(2026, 10, 9), monday);
+
+        Assert.Equal(1, gym.CurrentStreak(monday));
+    }
+
+    [Fact]
+    public void A_missed_day_ends_the_streak_but_best_streak_remembers()
+    {
+        // Ticked Fri Oct 2 and Mon Oct 5, missed Wed Oct 7, ticked Fri Oct 9. Today is Fri Oct 9.
+        var today = new DateOnly(2026, 10, 9);
+        var early = new Routine("Gym", new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday }, null, new DateOnly(2026, 10, 1));
+        early.Tick(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 2));
+        early.Tick(new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 5));
+        early.Tick(new DateOnly(2026, 10, 9), today);
+
+        Assert.Equal(1, early.CurrentStreak(today));
+        Assert.Equal(2, early.BestStreak(today));
     }
 }

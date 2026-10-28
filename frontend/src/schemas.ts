@@ -42,6 +42,10 @@ export const RoutineSchema = z.object({
   isDoneToday: z.boolean(),
   /** Scheduled days from the last 6 days that weren't ticked ("yyyy-MM-dd"). They can still be ticked late. */
   missedDays: z.array(z.string()),
+  /** Scheduled days ticked in a row, counting back from today. Days off don't break it. */
+  currentStreak: z.number().int(),
+  /** The longest run ever. */
+  bestStreak: z.number().int(),
 })
 
 /** A routine. The type is built from the schema, like Task. */
@@ -61,4 +65,26 @@ export const MeSchema = z.object({
 /** Every error the server sends has this shape: { "error": "..." }. */
 export const ErrorSchema = z.object({
   error: z.string(),
+})
+
+/**
+ * One day of a routine's history, from GET /routines/{id}/history.
+ *
+ * @remarks
+ * status: notstarted (before the routine existed), off (not one of its days back then),
+ * done, missed, or pending (today, not ticked yet).
+ * canTick is true for a missed day still inside the 6-day window.
+ */
+export const HistoryDaySchema = z.object({
+  date: z.string(),
+  status: z.enum(['notstarted', 'off', 'done', 'missed', 'pending']),
+  canTick: z.boolean(),
+})
+
+/** One day of history. */
+export type HistoryDay = z.infer<typeof HistoryDaySchema>
+
+/** The secret part of the user's calendar link, from GET /account/calendar-link. */
+export const CalendarLinkSchema = z.object({
+  token: z.string(),
 })

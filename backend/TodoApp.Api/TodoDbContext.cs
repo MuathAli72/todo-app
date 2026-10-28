@@ -38,8 +38,11 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
     /// <summary>The Tasks table.</summary>
     public DbSet<TodoItem> Tasks => Set<TodoItem>();
 
-    /// <summary>The Routines table. Each routine's ticks are in the Completions table.</summary>
+    /// <summary>The Routines table. Each routine's ticks are in Completions, its schedules in RoutineSchedules.</summary>
     public DbSet<Routine> Routines => Set<Routine>();
+
+    /// <summary>Each user's secret calendar link (for reminders in their phone's calendar).</summary>
+    public DbSet<CalendarFeed> CalendarFeeds => Set<CalendarFeed>();
 
     /// <summary>Describes how the classes map to tables, plus the extra database rules.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -65,6 +68,14 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
             routine.HasIndex("UserId");
             // The global filter. Added to every query on Routines (their ticks come along with them).
             routine.HasQueryFilter(r => EF.Property<string>(r, "UserId") == CurrentUserId);
+        });
+
+        // One secret calendar link per user. Looked up by its token, which must be unique.
+        modelBuilder.Entity<CalendarFeed>(feed =>
+        {
+            feed.HasKey(f => f.UserId);
+            feed.HasIndex(f => f.Token).IsUnique();
+            feed.HasOne<IdentityUser>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TodoItem>().ToTable(t =>
@@ -94,6 +105,26 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
                                 .Select(d => Enum.Parse<DayOfWeek>(d))
                                 .ToList(),
                     daysComparer);
+
+            // Every schedule the routine has had, so past days are judged by the days valid back then.
+            // Like ticks, they belong to their routine: loaded, saved and deleted with it.
+            routine.OwnsMany(r => r.Schedules, schedule =>
+            {
+                schedule.ToTable("RoutineSchedules");
+                schedule.WithOwner().HasForeignKey("RoutineId");
+                schedule.HasKey(s => s.Id);
+                schedule.Property(s => s.Id).ValueGeneratedNever();
+                schedule.Ignore(s => s.Days);
+                // Same storage as the routine's own days: one text column like "Monday,Friday".
+                schedule.Property<List<DayOfWeek>>("_days")
+                    .HasColumnName("Days")
+                    .HasConversion(
+                        days => string.Join(",", days),
+                        text => text.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(d => Enum.Parse<DayOfWeek>(d))
+                                    .ToList(),
+                        daysComparer);
+            });
 
             // Ticks belong to their routine: loaded, saved and deleted with it.
             routine.OwnsMany(r => r.Completions, completion =>

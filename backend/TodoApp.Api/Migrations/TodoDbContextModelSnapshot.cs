@@ -21,6 +21,23 @@ namespace TodoApp.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CalendarFeed", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("CalendarFeeds");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -300,6 +317,15 @@ namespace TodoApp.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CalendarFeed", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -384,7 +410,35 @@ namespace TodoApp.Api.Migrations
                                 .HasForeignKey("RoutineId");
                         });
 
+                    b.OwnsMany("TodoApp.Core.RoutineSchedule", "Schedules", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<Guid>("RoutineId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateOnly>("StartsOn")
+                                .HasColumnType("date");
+
+                            b1.Property<string>("_days")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("Days");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("RoutineId");
+
+                            b1.ToTable("RoutineSchedules", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("RoutineId");
+                        });
+
                     b.Navigation("Completions");
+
+                    b.Navigation("Schedules");
                 });
 
             modelBuilder.Entity("TodoApp.Core.TodoItem", b =>

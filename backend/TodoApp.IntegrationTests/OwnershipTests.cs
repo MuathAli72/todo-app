@@ -81,6 +81,57 @@ public class OwnershipTests : IClassFixture<ApiFactory>
         Assert.Equal(1, routinesForA.GetArrayLength());
     }
 
+    [Fact]
+    public async Task The_calendar_link_shows_only_your_routines_without_logging_in()
+    {
+        var userA = await NewLoggedInUserAsync();
+        var userB = await NewLoggedInUserAsync();
+        await userA.PostAsJsonAsync("/routines", new { title = "Read", days = new[] { "Monday", "Friday" }, time = "07:30" });
+        await userB.PostAsJsonAsync("/routines", new { title = "B's secret", days = new[] { "Monday" }, time = (string?)null });
+        var link = await userA.GetFromJsonAsync<JsonElement>("/account/calendar-link");
+        var token = link.GetProperty("token").GetString();
+
+        // A calendar app has no login cookie: the secret token in the address is enough.
+        var calendarApp = _factory.CreateClient();
+        var response = await calendarApp.GetAsync($"/calendar/{token}.ics");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/calendar", response.Content.Headers.ContentType?.MediaType);
+        var ics = await response.Content.ReadAsStringAsync();
+        Assert.Contains("SUMMARY:Read", ics);
+        Assert.Contains("RRULE:FREQ=WEEKLY;BYDAY=MO,FR", ics);
+        Assert.Contains("BEGIN:VALARM", ics);
+        Assert.DoesNotContain("B's secret", ics);
+    }
+
+    [Fact]
+    public async Task Resetting_the_calendar_link_stops_the_old_one()
+    {
+        var user = await NewLoggedInUserAsync();
+        var oldToken = (await user.GetFromJsonAsync<JsonElement>("/account/calendar-link")).GetProperty("token").GetString();
+
+        await user.PostAsync("/account/calendar-link/reset", null);
+        var oldLink = await _factory.CreateClient().GetAsync($"/calendar/{oldToken}.ics");
+
+        Assert.Equal(HttpStatusCode.NotFound, oldLink.StatusCode);
+    }
+
+    [Fact]
+    public async Task History_returns_the_last_30_days()
+    {
+        var user = await NewLoggedInUserAsync();
+        var created = await user.PostAsJsonAsync("/routines",
+            new { title = "Stretch", days = new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" }, time = (string?)null });
+        var routineId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+
+        var history = await user.GetFromJsonAsync<JsonElement>($"/routines/{routineId}/history");
+
+        Assert.Equal(30, history.GetArrayLength());
+        // Created today and on every day: today is the only day it existed, and it isn't ticked yet.
+        Assert.Equal("pending", history[29].GetProperty("status").GetString());
+        Assert.Equal("notstarted", history[0].GetProperty("status").GetString());
+    }
+
     // A new client with its own cookie jar, registered (and so logged in) as a brand-new user.
     private async Task<HttpClient> NewLoggedInUserAsync()
     {

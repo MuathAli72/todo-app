@@ -3,6 +3,8 @@ import { TitleInputSchema, type Routine } from '../schemas'
 import { dayNames, dayLabel } from '../dates'
 import type { RoutineChanges } from '../hooks/useRoutines'
 import { DayPicker } from './DayPicker'
+import { RoutineHistory } from './RoutineHistory'
+import { CalendarLink } from './CalendarLink'
 
 type Props = {
   routines: Routine[]
@@ -10,6 +12,8 @@ type Props = {
   onToggleToday: (routine: Routine) => void
   /** Ticks a missed day late. date is "yyyy-MM-dd". */
   onTickMissedDay: (routine: Routine, date: string) => void
+  /** Ticks (done = true) or unticks any day, from the history view. Resolves to true when it worked. */
+  onSetDayDone: (routine: Routine, date: string, done: boolean) => Promise<boolean>
   /** Saves an edit. Resolves to true when everything saved. */
   onUpdate: (routine: Routine, changes: RoutineChanges) => Promise<boolean>
   /** Deletes a routine and its history. */
@@ -21,11 +25,14 @@ type Props = {
  *
  * @remarks
  * By default it only shows routines that matter today: on today, or with missed days.
- * "Show all" lists every routine.
+ * "Show all" lists every routine. "History" opens a routine's last 30 days,
+ * and "Calendar" shows the link for adding routines to a phone calendar.
  * It only holds screen state (Show all, and the edit form). The routines come from useRoutines.
  */
-export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate, onDelete }: Props) {
+export function RoutineList({ routines, onToggleToday, onTickMissedDay, onSetDayDone, onUpdate, onDelete }: Props) {
   const [showAll, setShowAll] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
+  const [historyRoutineId, setHistoryRoutineId] = useState<string | null>(null)
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editDays, setEditDays] = useState<string[]>([])
@@ -82,10 +89,17 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
     <section className="routines">
       <div className="routines-header">
         <h2>Routines</h2>
-        <button className="quiet" onClick={() => setShowAll(!showAll)}>
-          {showAll ? 'Show today' : 'Show all'}
-        </button>
+        <div className="routines-header-actions">
+          <button className="quiet" onClick={() => setShowCalendar(!showCalendar)}>
+            {showCalendar ? 'Hide calendar' : 'Calendar'}
+          </button>
+          <button className="quiet" onClick={() => setShowAll(!showAll)}>
+            {showAll ? 'Show today' : 'Show all'}
+          </button>
+        </div>
       </div>
+
+      {showCalendar && <CalendarLink />}
 
       {visibleRoutines.length === 0 && (
         <p className="routines-empty">No routines today.</p>
@@ -128,6 +142,12 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
                     <span className="checkbox-spacer" aria-hidden="true" />
                   )}
                   <span className="task-title">{routine.title}</span>
+                  {/* The streak: scheduled days done in a row. Hover shows the best ever. */}
+                  {routine.currentStreak > 0 && (
+                    <span className="streak" title={`Best streak: ${routine.bestStreak}`}>
+                      🔥 {routine.currentStreak}
+                    </span>
+                  )}
                   {routine.time && (
                     <span className="task-due">{routine.time.slice(0, 5)}</span>
                   )}
@@ -147,6 +167,9 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
                       </span>
                     ))}
                   </span>
+                  <button onClick={() => setHistoryRoutineId(historyRoutineId === routine.id ? null : routine.id)}>
+                    History
+                  </button>
                   <button onClick={() => startEdit(routine)}>Edit</button>
                   <button className="danger" onClick={() => confirmDelete(routine)}>Delete</button>
                 </div>
@@ -160,6 +183,9 @@ export function RoutineList({ routines, onToggleToday, onTickMissedDay, onUpdate
                       </button>
                     ))}
                   </div>
+                )}
+                {historyRoutineId === routine.id && (
+                  <RoutineHistory routine={routine} onSetDayDone={onSetDayDone} />
                 )}
               </>
             )}
