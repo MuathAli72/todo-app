@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { z } from 'zod'
 import { apiFetch } from '../api'
-import { RoutineSchema, type Routine } from '../schemas'
+import { HistoryDaySchema, RoutineSchema, type HistoryDay, type Routine } from '../schemas'
 import { formatDate } from '../dates'
 
 /** What the routine edit form sends to updateRoutine. */
@@ -33,6 +33,30 @@ function fetchRoutines(): Promise<Routine[]> {
     })
     .then(data => {
       const result = z.array(RoutineSchema).safeParse(data)
+      if (!result.success) {
+        throw new Error()
+      }
+      return result.data
+    })
+}
+
+/**
+ * Loads one routine's history: the last 30 days, oldest first.
+ *
+ * @remarks
+ * Outside the hook because it needs no state. RoutineHistory calls it directly
+ * and loads again whenever the routine changes (e.g. after a tick).
+ */
+export function fetchHistory(routineId: string): Promise<HistoryDay[]> {
+  return apiFetch(`/routines/${routineId}/history`)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error()
+      }
+      return response.json()
+    })
+    .then(data => {
+      const result = z.array(HistoryDaySchema).safeParse(data)
       if (!result.success) {
         throw new Error()
       }
@@ -216,6 +240,40 @@ export function useRoutines() {
       })
   }
 
+  /**
+   * Ticks or unticks any day, from the history view. Unticking is how a wrong late tick is undone.
+   *
+   * @remarks
+   * Afterwards it reloads the routines, because a tick changes streaks and missed days,
+   * which only the server works out.
+   *
+   * @param date - "yyyy-MM-dd".
+   * @param done - true to tick, false to untick.
+   * @returns true if it worked (an error was already shown if not).
+   */
+  function setDayDone(routine: Routine, date: string, done: boolean): Promise<boolean> {
+    const request = done
+      ? apiFetch(`/routines/${routine.id}/completions`, {
+          method: 'POST',
+          body: JSON.stringify({ date })
+        })
+      : apiFetch(`/routines/${routine.id}/completions/${date}`, {
+          method: 'DELETE'
+        })
+
+    return request
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error) })
+        }
+        return fetchRoutines().then(setRoutines).then(() => true)
+      })
+      .catch(err => {
+        alert(err.message)
+        return false
+      })
+  }
+
   /** Deletes a routine and all its ticks. RoutineList asks the user to confirm first. */
   function deleteRoutine(routine: Routine) {
     apiFetch(`/routines/${routine.id}`, {
@@ -230,5 +288,5 @@ export function useRoutines() {
       .catch(err => alert(err.message))
   }
 
-  return { routines, toggleToday, tickMissedDay, addRoutine, updateRoutine, deleteRoutine }
+  return { routines, toggleToday, tickMissedDay, setDayDone, addRoutine, updateRoutine, deleteRoutine }
 }

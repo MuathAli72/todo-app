@@ -63,13 +63,17 @@ A routine is something you do on set days of the week, like "Gym on Mon, Wed, Fr
 1. A title can't be empty, and a routine needs at least one day.
 2. You can only tick a day the routine is scheduled on.
 3. You can't tick a day in the future.
-4. You can't tick a day before the routine existed, or before its days were last changed.
+4. You can't tick a day before the routine existed. Each past day is judged by the days the routine had **back then** (schedule history), so changing the days never rewrites the past.
 5. You can tick a day late, but only up to **6 days back**. Older days are locked.
 6. Ticking the same day twice does nothing. It's still ticked once.
 
 **Missed days** are the scheduled days in the last 6 days (not counting today) that weren't ticked. They aren't stored anywhere. They're calculated every time from the schedule and the completions, so they can never go out of sync. Each missed day shows as a button you can click to tick it late.
 
-**Actions:** add, edit title / days / time, tick and untick today, tick a missed day, delete.
+**Actions:** add, edit title / days / time, tick and untick today, tick a missed day, delete, see the last 30 days (and undo a tick there), get a calendar link for reminders.
+
+**Streaks** count scheduled days ticked in a row. Days off don't break a streak, and today doesn't break it until the day is over. Like missed days, streaks are calculated, never stored. Each routine shows its current streak (🔥 3); its history shows the best one too.
+
+**Reminders** come from a secret calendar link (an `.ics` feed) that phone and computer calendars subscribe to. Each routine becomes a repeating event, with an alert at its time if it has one. Calendar apps can't log in, so the long random link is the key; it can be reset if it's ever shared by mistake.
 
 ## Design decisions
 
@@ -82,7 +86,7 @@ Each of these was a choice between options. The alternative is listed so the tra
 | Made `Routine` its own aggregate, not a kind of task | A task is done once, and a routine is done per day. A routine passed around as a task would break code that expects "done" to mean done forever | `Routine` inheriting from `TodoItem` | Every task rule having special cases for routines |
 | Calculated missed days instead of storing them | One source of truth: the schedule plus the completions | A "missed" record per day | A background job, and records that can disagree with the schedule |
 | Limited late ticks to 6 days, in the domain | It matches the missed-days window. The rule lives in one place, so Postman can't do more than the app | Enforcing it only in the frontend | A back door: any direct API call could tick a day from months ago |
-| Restarted missed-day tracking when a routine's days change | Simple and honest: we only judge days under the current schedule | Saving the full history of schedule changes | A new table, and more complex rules for every past day |
+| Kept a history of schedules (a new one each time the days change) | Each past day is judged by the days that applied back then, so misses, history and streaks stay right after a change | Restarting tracking on every change (our first version) | Past misses vanishing, and streaks resetting, whenever the days were edited |
 | Stored days as text in one column ("Monday,Wednesday,Friday") | Days are always read and written together, as one value | A separate table with one row per day | An extra table and join for no real benefit |
 | Worked out "today" from the user's time zone, which the browser sends in an `X-Time-Zone` header | Servers usually run on UTC. At 1 am in Riyadh it's still yesterday in UTC, so ticks and "is it today" would be wrong | The browser sending its date, or fixing the server to one time zone | Trusting the browser's date would let any request get around the 6-day rule. A fixed zone breaks for anyone living somewhere else |
 | `TodoList` answers `true`/`false` ("did I find that task?"), and the API turns `false` into a 404 | The domain doesn't know about HTTP, so it answers in plain values | Throwing an error, or each endpoint checking the id first | A try/catch in every endpoint, or the same check copied six times |
@@ -155,8 +159,15 @@ The frontend check is for speed. The backend and database checks are the ones th
 | DELETE | `/routines/{id}` | Delete a routine and its history |
 | POST | `/routines/{id}/completions` | Tick a day (`{ "date": "2026-10-12" }`) |
 | DELETE | `/routines/{id}/completions/{date}` | Untick a day |
+| GET | `/routines/{id}/history?days=30` | Each of the last days: `done`, `missed`, `off`, `pending` or `notstarted`, and whether it can still be ticked |
+| POST | `/account/register`, `/account/login`, `/account/logout` | Accounts (login cookie) |
+| GET | `/account/me` | Who is logged in (`401` if nobody) |
+| GET | `/account/calendar-link` | Your secret calendar link's token |
+| POST | `/account/calendar-link/reset` | A new token; the old link stops working |
+| GET | `/calendar/{token}.ics` | Your routines as a calendar feed. No login: the token is the key |
 
-- **Errors:** `400` for bad input and `404` for an id that doesn't exist. Both send `{ "error": "..." }`.
+- **Errors:** `400` for bad input, `401` when not logged in, `404` for an id that doesn't exist (or belongs to someone else), `429` after too many wrong passwords. All send `{ "error": "..." }`.
+- **Login:** every task and routine endpoint needs the login cookie. Each user only ever sees their own data: a global filter in `TodoDbContext` adds the user to every query.
 - **Time zone:** send `X-Time-Zone` (for example `Asia/Riyadh`) so "today" is the user's today. The frontend does this on every request. If it's missing or unknown, the server uses its own clock, so quick tests in Swagger or Postman still work.
 - **Swagger:** while the backend runs in development, open `http://localhost:5149/swagger` to see and try every endpoint. The raw OpenAPI description is at `/openapi/v1.json`.
 
@@ -243,9 +254,7 @@ Written before the code. The tests are built from them.
 
 ## Known limitations, on purpose
 
-- **No reminders or notifications.** A routine's time is shown, but nothing happens at that time yet.
-- **Changing a routine's days restarts its missed-day tracking.** Past ticks are kept, but days before the change are no longer judged.
-- **A late tick can't be undone from the page.** Once a missed day is ticked, its button disappears. The history view (below) would fix this.
+- **Reminders need a calendar app.** There are no push notifications from the site itself; reminders come from the calendar link. Calendar apps refresh subscribed links every few hours, so a new routine can take a while to appear.
 - **Without the `X-Time-Zone` header, "today" comes from the server's clock.** The app always sends it. The fallback is only there for quick tests.
 - **The API sends priority as a number but accepts it as a word.** It works, but sending words both ways would be tidier.
 - **The task API accepts any date format C# can read.** The frontend always sends YYYY-MM-DD. The routine tick route only accepts YYYY-MM-DD.
@@ -310,8 +319,6 @@ Copies are spread across nodes, health checks restart frozen copies, and updates
 
 ## Future ideas
 
-- **Progress page.** Streaks, best streak, total completions, this week vs last week, and the last 30 days as squares, per routine. The 6-day late tick already works as a built-in "streak saver."
-- **History view.** The last 30 days of each routine, which would also let you undo a mis-clicked late tick.
-- **Schedule history.** Save every change to a routine's days, so stats and missed days stay accurate across changes. This pays back the shortcut described under "Design decisions."
 - **Undo or a trash bin** for deletes, instead of a confirm step.
-- **Reminders** using a routine's time.
+- **Push notifications** from the site itself, as well as calendar reminders.
+- **Stats across routines,** like this week vs last week.

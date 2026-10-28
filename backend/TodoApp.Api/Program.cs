@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TodoApp.Core;
@@ -114,7 +116,9 @@ static RoutineResponse ToResponse(Routine r, DateOnly today) => new(
     r.Time,
     r.IsScheduledOn(today),
     r.IsDoneOn(today),
-    r.MissedDays(today));
+    r.MissedDays(today),
+    r.CurrentStreak(today),
+    r.BestStreak(today));
 
 // The 404 answers, written once so every endpoint says the same thing.
 // They carry an { error } message like the 400s, so the frontend can show it.
@@ -204,6 +208,69 @@ accountRoutes.MapGet("/me", (ClaimsPrincipal user) => new MeResponse(user.Identi
 .WithDescription("The frontend calls this when the page opens. 401 means nobody is logged in.")
 .Produces<MeResponse>(StatusCodes.Status200OK)
 .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
+
+// The user's secret calendar link. Made the first time it's asked for, then the same one every time.
+accountRoutes.MapGet("/calendar-link", async (ClaimsPrincipal user, TodoDbContext db) =>
+{
+    var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var feed = await db.CalendarFeeds.FindAsync(userId);
+    if (feed == null)
+    {
+        feed = new CalendarFeed { UserId = userId, Token = NewCalendarToken() };
+        db.CalendarFeeds.Add(feed);
+        await db.SaveChangesAsync();
+    }
+    return new CalendarLinkResponse(feed.Token);
+})
+.RequireAuthorization()
+.WithSummary("Get your secret calendar link")
+.WithDescription("Subscribe to /calendar/{token}.ics in a calendar app to get your routines as repeating events with reminders.")
+.Produces<CalendarLinkResponse>(StatusCodes.Status200OK)
+.Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
+
+accountRoutes.MapPost("/calendar-link/reset", async (ClaimsPrincipal user, TodoDbContext db) =>
+{
+    var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var feed = await db.CalendarFeeds.FindAsync(userId);
+    if (feed == null)
+    {
+        feed = new CalendarFeed { UserId = userId };
+        db.CalendarFeeds.Add(feed);
+    }
+    feed.Token = NewCalendarToken();
+    await db.SaveChangesAsync();
+    return new CalendarLinkResponse(feed.Token);
+})
+.RequireAuthorization()
+.WithSummary("Make a new calendar link")
+.WithDescription("The old link stops working. Use this if the link was shared by mistake.")
+.Produces<CalendarLinkResponse>(StatusCodes.Status200OK)
+.Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
+
+// The feed itself. No login: calendar apps can't log in, so the secret token in the address is the key.
+app.MapGet("/calendar/{token}.ics", async (string token, TodoDbContext db) =>
+{
+    var feed = await db.CalendarFeeds.FirstOrDefaultAsync(f => f.Token == token);
+    if (feed == null)
+    {
+        return Results.NotFound(new ErrorResponse("This calendar link doesn't work anymore. Get a new one in the app."));
+    }
+    // Nobody is logged in here, so the per-user filter would hide everything.
+    // IgnoreQueryFilters turns it off, and the Where picks this link's owner instead.
+    var routines = await db.Routines
+        .IgnoreQueryFilters()
+        .Where(r => EF.Property<string>(r, "UserId") == feed.UserId)
+        .OrderBy(r => r.CreatedOn)
+        .ToListAsync();
+    return Results.Text(CalendarFeedBuilder.Build(routines, DateTime.UtcNow), "text/calendar; charset=utf-8");
+})
+.WithTags("Calendar")
+.WithSummary("A user's routines as a calendar feed (.ics)")
+.Produces<string>(StatusCodes.Status200OK, "text/calendar")
+.Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+// 32 random bytes, written with URL-safe letters: impossible to guess.
+static string NewCalendarToken() => WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
 
 // ---------- Tasks ----------
 // A group gives every endpoint inside it the same address prefix and the same Swagger heading.
@@ -388,6 +455,25 @@ routineRoutes.MapGet("/", async (RoutineRepository repo, [FromHeader(Name = "X-T
 })
 .WithSummary("List all routines, with today's status and missed days");
 
+routineRoutes.MapGet("/{id}/history", async (Guid id, RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone, int? days) =>
+{
+    var routine = await repo.GetAsync(id);
+    if (routine == null)
+    {
+        return RoutineNotFound();
+    }
+    var today = Today(timeZone);
+    // 30 days unless asked otherwise, and never more than 90.
+    var count = Math.Clamp(days ?? 30, 1, 90);
+    var history = routine.History(today, count)
+        .Select(d => new HistoryDayResponse(d.Date, d.Status.ToString().ToLowerInvariant(), d.CanTick));
+    return Results.Ok(history);
+})
+.WithSummary("What happened on each of the last days, oldest first")
+.WithDescription("Status is notstarted, off, done, missed or pending (today, not ticked yet). canTick is true for missed days that can still be ticked late. ?days= sets how many (default 30, max 90).")
+.Produces<List<HistoryDayResponse>>(StatusCodes.Status200OK)
+.Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
 routineRoutes.MapPost("/", async (CreateRoutineRequest request, IValidator<CreateRoutineRequest> validator, RoutineRepository repo, [FromHeader(Name = "X-Time-Zone")] string? timeZone) =>
 {
     var result = validator.Validate(request);
@@ -474,7 +560,7 @@ routineRoutes.MapPatch("/{id}/days", async (Guid id, ChangeDaysRequest request, 
     }
 })
 .WithSummary("Change a routine's days")
-.WithDescription("Past ticks are kept. Missed-day tracking restarts from today.")
+.WithDescription("The new days count from today. Past days keep the schedule they had, so old ticks and misses stay.")
 .Produces(StatusCodes.Status204NoContent)
 .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
 .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
@@ -594,7 +680,11 @@ public record RoutineResponse(
     TimeOnly? Time,
     bool IsToday,
     bool IsDoneToday,
-    List<DateOnly> MissedDays);
+    List<DateOnly> MissedDays,
+    int CurrentStreak,
+    int BestStreak);
+public record HistoryDayResponse(DateOnly Date, string Status, bool CanTick);
+public record CalendarLinkResponse(string Token);
 public record ChangeDaysRequest(List<string> Days);
 public record ChangeTimeRequest(string? Time);
 public record TickRequest(string Date);

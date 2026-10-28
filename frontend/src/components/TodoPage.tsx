@@ -26,7 +26,7 @@ type Props = {
  */
 export function TodoPage({ email, theme, onThemeChange, onLogout }: Props) {
   const { tasks, addTask, renameTask, toggleTask, changePriority, changeDueDate, deleteTask } = useTasks()
-  const { routines, addRoutine, toggleToday, tickMissedDay, updateRoutine, deleteRoutine } = useRoutines()
+  const { routines, addRoutine, toggleToday, tickMissedDay, setDayDone, updateRoutine, deleteRoutine } = useRoutines()
 
   return (
     <div className="app">
@@ -45,6 +45,7 @@ export function TodoPage({ email, theme, onThemeChange, onLogout }: Props) {
         routines={routines}
         onToggleToday={toggleToday}
         onTickMissedDay={tickMissedDay}
+        onSetDayDone={setDayDone}
         onUpdate={updateRoutine}
         onDelete={deleteRoutine}
       />
