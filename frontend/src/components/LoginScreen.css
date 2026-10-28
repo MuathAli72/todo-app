@@ -1,28 +1,71 @@
-/* The login screen. Colors come from the page's theme, so it follows Dark/Light. */
+/* The landing page: the theme's scene on top, the form below, all in one card.
+   Colors come from the theme variables in App.css, so it follows Ocean, Aurora and Desert. */
 .login-screen {
-  max-width: 360px;
+  max-width: 440px;
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--panel-shadow);
+  overflow: hidden;
+}
+
+/* The scene sits flush with the card's top edge. */
+.login-card .scene {
+  border-radius: 0;
+}
+
+.login-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.login-pitch {
+  margin: 0.25rem 0 1.25rem;
+  color: var(--muted);
+}
+
+.login-body h2 {
+  margin: 0 0 0.25rem;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .login-form label {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  font-size: 0.875rem;
+  color: var(--muted);
 }
 
 .login-form input {
   font: inherit;
-  padding: 8px 10px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.75rem;
+}
+
+.login-form button[type="submit"] {
+  padding: 0.65rem;
+  font-size: 1rem;
 }
 
 .login-error {
-  color: #e5484d;
+  color: var(--danger);
   margin: 0;
 }
 
@@ -31,11 +74,15 @@
   background: none;
   border: none;
   padding: 0;
-  color: inherit;
-  opacity: 0.75;
+  color: var(--muted);
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
+}
+
+.login-switch:hover {
+  background: none;
+  color: var(--text);
 }
 
 /* Settings and Log out side by side, top right of the page. */
@@ -48,15 +95,16 @@
 /* Red like "sign out" in most apps: it ends your session, so it shouldn't look like a normal button. */
 .logout-button {
   font: inherit;
+  font-size: 0.875rem;
   background: none;
-  border: 1px solid #e5484d;
-  color: #e5484d;
-  border-radius: 6px;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius);
   padding: 4px 10px;
   cursor: pointer;
 }
 
 .logout-button:hover {
-  background: #e5484d;
-  color: #fff;
+  background: var(--danger);
+  color: var(--bg);
 }

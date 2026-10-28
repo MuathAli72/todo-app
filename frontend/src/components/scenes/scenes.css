@@ -1,0 +1,179 @@
+/* The illustrated scenes. Hover effects live here (CSS); click effects keep state in each scene. */
+
+.scene {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-card);
+}
+
+.scene .clickable {
+  cursor: pointer;
+}
+
+/* ----- Ocean ----- */
+
+.ocean-glow {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.ocean-moon:hover .ocean-glow {
+  opacity: 1;
+}
+
+.ocean-meteor {
+  opacity: 0;
+  animation: meteor 1.1s ease-out;
+}
+
+@keyframes meteor {
+  0% { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(-170px, 65px); }
+}
+
+.ocean-sea:hover .ocean-wave {
+  animation: drift 2.6s ease-in-out infinite;
+}
+
+.ocean-sea:hover .ocean-wave-back {
+  animation-direction: reverse;
+}
+
+@keyframes drift {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-12px); }
+}
+
+.ocean-boat {
+  transform: translateX(-60px);
+  transition: transform 3s ease-in-out;
+}
+
+.ocean-boat.out {
+  transform: translateX(280px);
+}
+
+.ocean-palm {
+  /* Rotate or grow around this part itself, not the corner of the picture. */
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+
+.ocean-island:hover .ocean-palm {
+  animation: sway 1.4s ease-in-out infinite;
+}
+
+@keyframes sway {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(-8deg); }
+}
+
+/* ----- Aurora ----- */
+
+.aurora-band {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 1.2s;
+}
+
+.aurora-sky:hover .aurora-band {
+  animation: ripple 3s ease-in-out infinite;
+}
+
+.aurora-sky:hover .aurora-band-back {
+  animation-direction: reverse;
+}
+
+@keyframes ripple {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(6px) scaleY(1.25); }
+}
+
+.aurora-flake {
+  opacity: 0;
+}
+
+.aurora-snow.snowing .aurora-flake {
+  animation: fall 3.2s linear infinite;
+}
+
+@keyframes fall {
+  0% { opacity: 0; transform: translateY(-10px); }
+  10% { opacity: 1; }
+  100% { opacity: 0.8; transform: translateY(150px); }
+}
+
+.aurora-sparkle {
+  opacity: 0.2;
+}
+
+.aurora-hills:hover .aurora-sparkle {
+  animation: twinkle 1s ease-in-out infinite alternate;
+}
+
+.aurora-hills:hover .aurora-sparkle:nth-child(2n) {
+  animation-delay: 0.5s;
+}
+
+@keyframes twinkle {
+  from { opacity: 0.2; }
+  to { opacity: 1; }
+}
+
+/* ----- Desert ----- */
+
+.desert-sky {
+  transition: fill 1.5s;
+}
+
+.desert-rays {
+  /* Rotate or grow around this part itself, not the corner of the picture. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.desert-sun:hover .desert-rays {
+  animation: turn 8s linear infinite;
+}
+
+@keyframes turn {
+  to { transform: rotate(360deg); }
+}
+
+.desert-cactus {
+  /* Rotate or grow around this part itself, not the corner of the picture. */
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+
+.desert-cactus:hover {
+  animation: wiggle 0.9s ease-in-out;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(3deg); }
+  75% { transform: rotate(-3deg); }
+}
+
+.desert-bloom {
+  /* Rotate or grow around this part itself, not the corner of the picture. */
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  transition: transform 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.desert-bloom.open {
+  transform: scale(1);
+}
+
+/* People who turn off motion in their device settings get still pictures. */
+@media (prefers-reduced-motion: reduce) {
+  .scene *,
+  .scene *::before {
+    animation: none !important;
+    transition: none !important;
+  }
+}

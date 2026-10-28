@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import type { ThemeChoice } from '../hooks/useTheme'
 
-/** The three theme buttons, in the order they're shown. */
+/** The theme buttons, in the order they're shown. */
 const themeOptions: { value: ThemeChoice, label: string }[] = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
+  { value: 'ocean', label: 'Ocean' },
+  { value: 'aurora', label: 'Aurora' },
+  { value: 'desert', label: 'Desert' },
   { value: 'system', label: 'System' },
 ]
 
@@ -43,6 +44,7 @@ export function Settings({ theme, onThemeChange }: Props) {
               </button>
             ))}
           </div>
+          <span className="settings-hint">System: Ocean on a dark device, Desert on a light one.</span>
         </div>
       )}
     </div>

@@ -1,61 +1,97 @@
-@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800&display=swap');
 
-/* Warm neutral UI. Color is only used when it means something:
+/* Three themes, each a whole look: colors, corners and shadows. useTheme puts the current one on
+   <html data-theme="...">, and every rule below only uses these variables, so switching a theme
+   restyles everything at once. Color still means something in every theme:
    green = done / low, yellow = medium / missed, red = high / delete.
-   Two themes share the same variable names. "System" picks one of them in useTheme. */
+   Each theme has a matching illustrated scene on the login page (components/scenes). */
 
-/* Dark (the default) */
-:root {
+/* Ocean world (the default): deep teal night, mint for done */
+:root,
+:root[data-theme="ocean"] {
   color-scheme: dark;
-  --bg: #201d1a;
-  --surface: #2a2622;
-  --surface-hover: #36312b;
-  --line: #3f3933;
-  --text: #f1ebe2;
-  --muted: #a89f93;
-  --faint: #5e564d;
-  --done: #6fcf7f;
-  --warn: #f2c14e;
-  --danger: #ef6b5b;
-  --low: #6fcf7f;
-  --medium: #f2c14e;
-  --high: #ef6b5b;
-  --primary: #f1ebe2;
-  --primary-ink: #201d1a;
-  --primary-hover: #ffffff;
-  --today-glow: rgba(241, 235, 226, 0.15);
-  --done-glow: rgba(111, 207, 127, 0.2);
-  --low-tint: rgba(111, 207, 127, 0.14);
-  --medium-tint: rgba(242, 193, 78, 0.14);
-  --high-tint: rgba(239, 107, 91, 0.14);
-  --panel-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --bg: #0b2a3c;
+  --surface: #123c52;
+  --surface-hover: #18506b;
+  --line: #1e5a75;
+  --text: #eafbff;
+  --muted: #8cbfd0;
+  --faint: #3e6f86;
+  --done: #3ddc97;
+  --warn: #ffd166;
+  --danger: #ff6b6b;
+  --low: #3ddc97;
+  --medium: #ffd166;
+  --high: #ff6b6b;
+  --primary: #3ddc97;
+  --primary-ink: #063321;
+  --primary-hover: #5be8ac;
+  --today-glow: rgba(234, 251, 255, 0.18);
+  --done-glow: rgba(61, 220, 151, 0.25);
+  --low-tint: rgba(61, 220, 151, 0.14);
+  --medium-tint: rgba(255, 209, 102, 0.14);
+  --high-tint: rgba(255, 107, 107, 0.14);
+  --panel-shadow: 0 10px 30px rgba(0, 10, 20, 0.45);
+  --radius: 10px;
+  --radius-card: 16px;
 }
 
-/* Light: warm paper, dark ink, the same meaning colors made deeper so they read on white */
-:root[data-theme="light"] {
+/* Arctic aurora: midnight blue, neon green and pink */
+:root[data-theme="aurora"] {
+  color-scheme: dark;
+  --bg: #0a1633;
+  --surface: #142349;
+  --surface-hover: #1d2f5e;
+  --line: #26396e;
+  --text: #eef4ff;
+  --muted: #a9b8e0;
+  --faint: #4a5a8c;
+  --done: #3dffb0;
+  --warn: #ffd166;
+  --danger: #ff7a8a;
+  --low: #3dffb0;
+  --medium: #ffd166;
+  --high: #ff7a8a;
+  --primary: #ff7ad9;
+  --primary-ink: #2b0a24;
+  --primary-hover: #ff9be3;
+  --today-glow: rgba(255, 122, 217, 0.25);
+  --done-glow: rgba(61, 255, 176, 0.25);
+  --low-tint: rgba(61, 255, 176, 0.12);
+  --medium-tint: rgba(255, 209, 102, 0.12);
+  --high-tint: rgba(255, 122, 138, 0.14);
+  --panel-shadow: 0 10px 30px rgba(0, 0, 20, 0.5);
+  --radius: 10px;
+  --radius-card: 16px;
+}
+
+/* Desert dawn (the light theme): peach sky, warm sand, sun orange */
+:root[data-theme="desert"] {
   color-scheme: light;
-  --bg: #f6f3ee;
+  --bg: #fff4ea;
   --surface: #ffffff;
-  --surface-hover: #eee8df;
-  --line: #e3ddd3;
-  --text: #27231f;
-  --muted: #6b6359;
-  --faint: #bdb4a8;
-  --done: #2e9b4e;
-  --warn: #9a6400;
+  --surface-hover: #fbe7d6;
+  --line: #f0d7c0;
+  --text: #3b2a1e;
+  --muted: #8a6a55;
+  --faint: #d5b9a2;
+  --done: #4e8f3a;
+  --warn: #b26b00;
   --danger: #c4483b;
-  --low: #3fa65c;
-  --medium: #d9a21b;
+  --low: #5e9f45;
+  --medium: #d98e2b;
   --high: #d4553f;
-  --primary: #27231f;
-  --primary-ink: #f6f3ee;
-  --primary-hover: #000000;
-  --today-glow: rgba(39, 35, 31, 0.12);
-  --done-glow: rgba(46, 155, 78, 0.2);
-  --low-tint: rgba(63, 166, 92, 0.12);
-  --medium-tint: rgba(217, 162, 27, 0.14);
+  --primary: #e07a3f;
+  --primary-ink: #ffffff;
+  --primary-hover: #c9682f;
+  --today-glow: rgba(224, 122, 63, 0.2);
+  --done-glow: rgba(78, 143, 58, 0.2);
+  --low-tint: rgba(94, 159, 69, 0.12);
+  --medium-tint: rgba(217, 142, 43, 0.14);
   --high-tint: rgba(212, 85, 63, 0.12);
-  --panel-shadow: 0 8px 24px rgba(39, 35, 31, 0.12);
+  --panel-shadow: 0 10px 30px rgba(120, 70, 30, 0.15);
+  --radius: 10px;
+  --radius-card: 16px;
 }
 
 * {
@@ -79,10 +115,15 @@ body {
   padding: 3rem 1rem 4rem;
 }
 
+h1,
+h2 {
+  font-family: 'Nunito', 'Atkinson Hyperlegible', system-ui, sans-serif;
+}
+
 h1 {
   font-size: 2.25rem;
   line-height: 1.15;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.01em;
   margin: 0 0 2.5rem;
 }
@@ -101,7 +142,7 @@ button {
   color: var(--text);
   background: var(--surface-hover);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 0.35rem 0.75rem;
   cursor: pointer;
 }
@@ -162,7 +203,7 @@ select {
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 0.45rem 0.6rem;
 }
 
@@ -203,7 +244,7 @@ input[type="checkbox"]:checked::after {
   padding: 0;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 
@@ -368,6 +409,7 @@ input[type="checkbox"]:checked::after {
   min-width: 0;
   padding: 0.65rem 0.8rem;
   background: var(--surface);
+  border-radius: var(--radius-card);
 }
 
 .add-row button {
@@ -426,19 +468,24 @@ input[type="checkbox"]:checked::after {
   right: 0;
   top: calc(100% + 6px);
   z-index: 10;
-  min-width: 240px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   box-shadow: var(--panel-shadow);
 }
 
 .settings-label {
   font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.settings-hint {
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -448,7 +495,7 @@ input[type="checkbox"]:checked::after {
   padding: 2px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .segmented button {
