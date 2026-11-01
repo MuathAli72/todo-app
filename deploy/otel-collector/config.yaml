@@ -1,0 +1,32 @@
+extensions:
+  basicauth/grafana:
+    client_auth:
+      username: ${env:GRAFANA_INSTANCE_ID}
+      password: ${env:GRAFANA_API_TOKEN}
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins: ["https://todo-app-yaw8.onrender.com"]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+  batch: {}
+
+exporters:
+  otlphttp/grafana:
+    endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
+    auth:
+      authenticator: basicauth/grafana
+
+service:
+  extensions: [basicauth/grafana]
+  pipelines:
+    traces:  { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
+    metrics: { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
+    logs:    { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
