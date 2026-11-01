@@ -6,6 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using TodoApp.Core;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,6 +25,38 @@ builder.Services.AddOpenApi();
 // A simple "are you alive?" check. Render and the CD pipeline call /health after a deploy.
 builder.Services.AddHealthChecks();
 
+// ---------- Telemetry (OpenTelemetry) ----------
+// Records what the API does and sends it to the Collector, which forwards it to Grafana Cloud.
+// Only switched on when OTEL_EXPORTER_OTLP_ENDPOINT is set (on Render). On your laptop and in the
+// tests it stays off, so nothing tries to send to a Collector that isn't there.
+if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+{
+    builder.Services.AddOpenTelemetry()
+        // The name every signal is labelled with, so Grafana shows "todo-api".
+        // The environment (Production, Development) lets you filter live data from test data.
+        .ConfigureResource(resource => resource
+            .AddService("todo-api")
+            .AddAttributes(new Dictionary<string, object>
+            {
+                ["deployment.environment.name"] = builder.Environment.EnvironmentName,
+            }))
+        // Traces: one per request, with the database queries inside it.
+        .WithTracing(tracing => tracing
+            .AddAspNetCoreInstrumentation(options =>
+                // /health is called often by Render; tracing it would only be noise.
+                options.Filter = context => !context.Request.Path.StartsWithSegments("/health"))
+            .AddSource("Npgsql"))
+        // Metrics: request counts and timings, memory and GC, and database connections.
+        .WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()
+            .AddMeter("System.Runtime")
+            .AddMeter("Npgsql"))
+        // Logs: the API's existing log messages go out too.
+        .WithLogging()
+        // One rider for all three. It reads the Collector's address and protocol from
+        // the OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_PROTOCOL settings.
+        .UseOtlpExporter();
+}
 // Which websites may call this API. On your laptop: the Vite dev server.
 // On the live server: set in Render's settings as Cors__AllowedOrigins__0, so no code change is needed.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
