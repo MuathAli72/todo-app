@@ -1,24 +1,31 @@
+extensions:
+  basicauth/grafana:
+    client_auth:
+      username: ${env:GRAFANA_INSTANCE_ID}
+      password: ${env:GRAFANA_API_TOKEN}
+
 receivers:
-  otlp:                          # front door: the standard OpenTelemetry format
+  otlp:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
-        cors:                    # lets the browser (frontend) send to it
+        cors:
           allowed_origins: ["https://todo-app-yaw8.onrender.com"]
 
 processors:
-  memory_limiter:                # stops the office from overflowing on a free instance
+  memory_limiter:
     check_interval: 1s
     limit_mib: 200
-  batch: {}                      # bundles scrolls instead of sending one by one
+  batch: {}
 
 exporters:
-  otlphttp/grafana:              # rider to Grafana Cloud
+  otlphttp/grafana:
     endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
-    headers:
-      Authorization: "Basic ${env:GRAFANA_OTLP_AUTH}"
+    auth:
+      authenticator: basicauth/grafana
 
 service:
+  extensions: [basicauth/grafana]
   pipelines:
     traces:  { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
     metrics: { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
