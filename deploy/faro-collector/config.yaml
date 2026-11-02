@@ -1,0 +1,42 @@
+# Public intake for browser data (Grafana Faro). Kept apart from the internal
+# collector so untrusted internet traffic can't affect the backend's pipeline.
+
+extensions:
+  # Copies each browser session's ID onto the outgoing request; Grafana needs it.
+  headers_setter:
+    headers:
+      - action: insert
+        key: X-Faro-Session-Id
+        from_context: X-Faro-Session-Id
+
+receivers:
+  faro:
+    # 0.0.0.0 = accept from outside the container (the default only listens inside).
+    endpoint: 0.0.0.0:8080
+    # Keeps request headers (like the session ID) so headers_setter can read them.
+    include_metadata: true
+    cors:
+      allowed_origins: ["https://todo-app-yaw8.onrender.com"]
+      allowed_headers: ["X-Faro-Session-Id", "Content-Type"]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+  # The cleaning step: hide email addresses in frontend logs before they leave.
+  transform:
+    error_mode: ignore
+    log_statements:
+      - replace_pattern(log.body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "***@***")
+
+exporters:
+  faro:
+    endpoint: ${env:FARO_ENDPOINT}
+    auth:
+      authenticator: headers_setter
+
+service:
+  extensions: [headers_setter]
+  pipelines:
+    traces: { receivers: [faro], processors: [memory_limiter], exporters: [faro] }
+    logs:   { receivers: [faro], processors: [memory_limiter, transform], exporters: [faro] }
