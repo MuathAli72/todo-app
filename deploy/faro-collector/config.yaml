@@ -17,7 +17,7 @@ receivers:
     include_metadata: true
     cors:
       allowed_origins: ["https://todo-app-yaw8.onrender.com"]
-      allowed_headers: ["X-Faro-Session-Id", "Content-Type"]
+            allowed_headers: ["X-Faro-Session-Id", "Content-Type", "Idempotency-Key"]
 
 processors:
   memory_limiter:
