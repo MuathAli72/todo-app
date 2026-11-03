@@ -19,6 +19,7 @@ builder.Services.AddDbContext<TodoDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TodoDb")));
 builder.Services.AddScoped<TodoListRepository>();
 builder.Services.AddScoped<RoutineRepository>();
+builder.Services.AddScoped<AuditLog>();
 // Lets TodoDbContext read who is logged in for the current request (for the per-user filter).
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
@@ -89,10 +90,19 @@ builder.Services.ConfigureApplicationCookie(options =>
     // An API answers 401/403. Without these, the cookie would try to redirect
     // to a login web page that doesn't exist.
     // They also send the usual { "error": "..." } shape, so the frontend can show the message.
-    options.Events.OnRedirectToLogin = context =>
+    options.Events.OnRedirectToLogin = async context =>
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return context.Response.WriteAsJsonAsync(new ErrorResponse("Please log in first."));
+        // Decision 15: a protected endpoint was called without a valid login, so it goes in the audit trail,
+        // with which endpoint was tried. Except /account/me: the website asks it on every page load
+        // to find out whether anyone is logged in, so a 401 there is normal, not suspicious.
+        if (!context.Request.Path.StartsWithSegments("/account/me"))
+        {
+            var audit = context.HttpContext.RequestServices.GetRequiredService<AuditLog>();
+            await audit.RecordAsync("account.unauthorized", "failure", userId: null,
+                targetType: "Endpoint", targetId: $"{context.Request.Method} {context.Request.Path}");
+        }
+        await context.Response.WriteAsJsonAsync(new ErrorResponse("Please log in first."));
     };
     options.Events.OnRedirectToAccessDenied = context =>
     {
@@ -100,6 +110,7 @@ builder.Services.ConfigureApplicationCookie(options =>
         return context.Response.WriteAsJsonAsync(new ErrorResponse("You're not allowed to do that."));
     };
 });
+
 
 var app = builder.Build();
 
@@ -167,7 +178,7 @@ app.MapHealthChecks("/health");
 
 var accountRoutes = app.MapGroup("/account").WithTags("Account");
 
-accountRoutes.MapPost("/register", async (RegisterRequest request, IValidator<RegisterRequest> validator, UserManager<IdentityUser> users, SignInManager<IdentityUser> signIn) =>
+accountRoutes.MapPost("/register", async (RegisterRequest request, IValidator<RegisterRequest> validator, UserManager<IdentityUser> users, SignInManager<IdentityUser> signIn, AuditLog audit) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -192,6 +203,7 @@ accountRoutes.MapPost("/register", async (RegisterRequest request, IValidator<Re
 
     // Log the new user in straight away, so they don't have to type it all again.
     await signIn.SignInAsync(user, isPersistent: true);
+    await audit.RecordAsync("account.registered", "success", user.Id);
     return Results.Created("/account/me", new MeResponse(request.Email));
 })
 .WithSummary("Create an account and log in")
@@ -199,7 +211,7 @@ accountRoutes.MapPost("/register", async (RegisterRequest request, IValidator<Re
 .Produces<MeResponse>(StatusCodes.Status201Created)
 .Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
 
-accountRoutes.MapPost("/login", async (LoginRequest request, IValidator<LoginRequest> validator, SignInManager<IdentityUser> signIn) =>
+accountRoutes.MapPost("/login", async (LoginRequest request, IValidator<LoginRequest> validator, SignInManager<IdentityUser> signIn, UserManager<IdentityUser> users, AuditLog audit) =>
 {
     var result = validator.Validate(request);
     if (!result.IsValid)
@@ -210,16 +222,24 @@ accountRoutes.MapPost("/login", async (LoginRequest request, IValidator<LoginReq
     // isPersistent: the cookie survives closing the browser.
     // lockoutOnFailure: wrong passwords count toward the lockout.
     var signedIn = await signIn.PasswordSignInAsync(request.Email, request.Password, isPersistent: true, lockoutOnFailure: true);
+
+    // Which account was tried, if the email belongs to one. The audit trail stores only its id,
+    // never the typed email (decision 12). Unknown email: no id at all.
+    var userId = (await users.FindByEmailAsync(request.Email))?.Id;
+
     if (signedIn.IsLockedOut)
     {
+        await audit.RecordAsync("account.locked_out", "failure", userId);
         return Results.Json(new ErrorResponse("Too many wrong tries. Wait a few minutes."), statusCode: StatusCodes.Status429TooManyRequests);
     }
     if (!signedIn.Succeeded)
     {
+        await audit.RecordAsync("account.login_failed", "failure", userId);
         // Same message for a wrong email and a wrong password,
         // so nobody can use this to find out which emails have accounts.
         return Results.Json(new ErrorResponse("Wrong email or password."), statusCode: StatusCodes.Status401Unauthorized);
     }
+    await audit.RecordAsync("account.login", "success", userId);
     return Results.NoContent();
 })
 .WithSummary("Log in")
@@ -229,9 +249,15 @@ accountRoutes.MapPost("/login", async (LoginRequest request, IValidator<LoginReq
 .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized)
 .Produces<ErrorResponse>(StatusCodes.Status429TooManyRequests);
 
-accountRoutes.MapPost("/logout", async (SignInManager<IdentityUser> signIn) =>
+accountRoutes.MapPost("/logout", async (ClaimsPrincipal user, SignInManager<IdentityUser> signIn, AuditLog audit) =>
 {
+    // Read who it is first: after SignOutAsync the request no longer knows.
+    var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
     await signIn.SignOutAsync();
+    if (userId != null)
+    {
+        await audit.RecordAsync("account.logout", "success", userId);
+    }
     return Results.NoContent();
 })
 .WithSummary("Log out")
@@ -264,7 +290,7 @@ accountRoutes.MapGet("/calendar-link", async (ClaimsPrincipal user, TodoDbContex
 .Produces<CalendarLinkResponse>(StatusCodes.Status200OK)
 .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
 
-accountRoutes.MapPost("/calendar-link/reset", async (ClaimsPrincipal user, TodoDbContext db) =>
+accountRoutes.MapPost("/calendar-link/reset", async (ClaimsPrincipal user, TodoDbContext db, AuditLog audit) =>
 {
     var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
     var feed = await db.CalendarFeeds.FindAsync(userId);
@@ -275,6 +301,7 @@ accountRoutes.MapPost("/calendar-link/reset", async (ClaimsPrincipal user, TodoD
     }
     feed.Token = NewCalendarToken();
     await db.SaveChangesAsync();
+    await audit.RecordAsync("account.calendar_link_reset", "success", userId);
     return new CalendarLinkResponse(feed.Token);
 })
 .RequireAuthorization()
