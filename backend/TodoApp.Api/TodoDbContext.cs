@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +47,8 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
     /// <summary>Each user's secret calendar link (for reminders in their phone's calendar).</summary>
     public DbSet<CalendarFeed> CalendarFeeds => Set<CalendarFeed>();
 
+    /// <summary>The audit trail: who changed what, plus account events like logins. Rows are only ever added.</summary>
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     /// <summary>Describes how the classes map to tables, plus the extra database rules.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -143,22 +148,35 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
                 t.HasCheckConstraint("CK_Routines_HasDays", "\"Days\" <> ''");
             });
         });
+
+        // ----- Audit trail -----
+        // No per-user filter here: users never read this table, only admins and the copier to Elasticsearch.
+        modelBuilder.Entity<AuditEvent>(audit =>
+        {
+            audit.Property(a => a.Action).HasMaxLength(100);
+            audit.Property(a => a.Outcome).HasMaxLength(20);
+            // Postgres' JSON type, so the old/new values can be searched inside the database too.
+            audit.Property(a => a.Changes).HasColumnType("jsonb");
+            audit.HasIndex(a => a.OccurredAt);
+        });
     }
 
     /// <summary>Saves changes, first stamping new tasks and routines with the logged-in user.</summary>
+    /// <summary>Saves changes: stamps new tasks and routines with their owner, then records everything in the audit trail.</summary>
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         StampOwner();
+        AddAuditEvents();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    /// <summary>Saves changes, first stamping new tasks and routines with the logged-in user.</summary>
+    /// <summary>Saves changes: stamps new tasks and routines with their owner, then records everything in the audit trail.</summary>
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         StampOwner();
+        AddAuditEvents();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
-
     // New rows get the current user as their owner, so no endpoint can forget to set it.
     private void StampOwner()
     {
@@ -170,5 +188,90 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
                     ?? throw new InvalidOperationException("Can't save a task or routine without a logged-in user.");
             }
         }
+    }
+
+    // Turns every added, changed or deleted task, routine and tick into an audit event.
+    // It runs BEFORE the save, so the events go into the same transaction as the change itself.
+    private void AddAuditEvents()
+    {
+        var now = DateTime.UtcNow;
+        var userId = CurrentUserId;
+        var traceId = Activity.Current?.TraceId.ToString();
+
+        var entries = ChangeTracker.Entries()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .ToList();
+
+        // Routines being deleted. Their ticks go with them; one "routine.deleted" event says it all.
+        var deletedRoutineIds = entries
+            .Where(e => e.State == EntityState.Deleted && e.Metadata.GetTableName() == "Routines")
+            .Select(e => e.Property("Id").CurrentValue)
+            .ToHashSet();
+
+        var events = new List<AuditEvent>();
+        foreach (var entry in entries)
+        {
+            (string TargetType, object? TargetId, string Action)? target = entry.Metadata.GetTableName() switch
+            {
+                "Tasks" => ("Task", entry.Property("Id").CurrentValue, "task." + Verb(entry.State)),
+                "Routines" => ("Routine", entry.Property("Id").CurrentValue, "routine." + Verb(entry.State)),
+                "Completions" when !deletedRoutineIds.Contains(entry.Property("RoutineId").CurrentValue)
+                    => ("Routine", entry.Property("RoutineId").CurrentValue,
+                        entry.State == EntityState.Deleted ? "routine.unticked" : "routine.ticked"),
+                // Everything else (Identity's user tables, schedules, the audit table itself) isn't recorded here.
+                _ => null,
+            };
+            if (target is not { } t)
+            {
+                continue;
+            }
+
+            events.Add(new AuditEvent
+            {
+                OccurredAt = now,
+                UserId = userId,
+                Action = t.Action,
+                TargetType = t.TargetType,
+                TargetId = t.TargetId?.ToString(),
+                Changes = DescribeChanges(entry),
+                Outcome = "success",
+                TraceId = traceId,
+            });
+        }
+        AuditEvents.AddRange(events);
+    }
+
+    private static string Verb(EntityState state) => state switch
+    {
+        EntityState.Added => "created",
+        EntityState.Deleted => "deleted",
+        _ => "updated",
+    };
+
+    // Enum values like Monday or High are written as words, not numbers, so the trail reads well in Kibana.
+    private static readonly JsonSerializerOptions AuditJson = new() { Converters = { new JsonStringEnumConverter() } };
+
+    // The fields that changed, as JSON: each one is [old, new]. New items have no old value, deleted ones no new value.
+    // The id and the hidden columns (owner, parent routine) are left out: the event already says who and which.
+    private static string? DescribeChanges(EntityEntry entry)
+    {
+        var changes = new Dictionary<string, object?[]>();
+        foreach (var property in entry.Properties)
+        {
+            if (property.Metadata.IsPrimaryKey() || property.Metadata.IsShadowProperty())
+            {
+                continue;
+            }
+            if (entry.State == EntityState.Modified && !property.IsModified)
+            {
+                continue;
+            }
+            var oldValue = entry.State == EntityState.Added ? null : property.OriginalValue;
+            var newValue = entry.State == EntityState.Deleted ? null : property.CurrentValue;
+            // The days live in a private field called _days; show them as "Days".
+            var name = property.Metadata.Name == "_days" ? "Days" : property.Metadata.Name;
+            changes[name] = [oldValue, newValue];
+        }
+        return changes.Count == 0 ? null : JsonSerializer.Serialize(changes, AuditJson);
     }
 }
