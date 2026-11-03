@@ -249,8 +249,7 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
     };
 
     // Enum values like Monday or High are written as words, not numbers, so the trail reads well in Kibana.
-    private static readonly JsonSerializerOptions AuditJson = new() { Converters = { new JsonStringEnumConverter() } };
-
+    private static readonly JsonSerializerOptions _auditJson = new() { Converters = { new JsonStringEnumConverter() } };
     // The fields that changed, as JSON: each one is [old, new]. New items have no old value, deleted ones no new value.
     // The id and the hidden columns (owner, parent routine) are left out: the event already says who and which.
     private static string? DescribeChanges(EntityEntry entry)
@@ -272,6 +271,6 @@ public class TodoDbContext : IdentityDbContext<IdentityUser>
             var name = property.Metadata.Name == "_days" ? "Days" : property.Metadata.Name;
             changes[name] = [oldValue, newValue];
         }
-        return changes.Count == 0 ? null : JsonSerializer.Serialize(changes, AuditJson);
+        return changes.Count == 0 ? null : JsonSerializer.Serialize(changes, _auditJson);
     }
 }
