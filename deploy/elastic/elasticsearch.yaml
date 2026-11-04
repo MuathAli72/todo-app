@@ -1,0 +1,36 @@
+# The audit trail's search store. One node is enough for a laptop.
+# The ECK operator builds it and adds HTTPS and a password for the built-in "elastic" user.
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: audit
+  namespace: elastic
+spec:
+  version: 9.4.3
+  # Elastic's official Docker Hub copy (docker.elastic.co is unreliable from this network).
+  image: docker.io/elastic/elasticsearch:9.4.3
+  nodeSets:
+    - name: default
+      count: 1
+      config:
+        # Elasticsearch normally wants a raised kernel memory setting (vm.max_map_count)
+        # that kind nodes don't have. This switches that feature off. Fine for a dev setup.
+        node.store.allow_mmap: false
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                # 2 GB for the container; Elasticsearch gives itself half of it (1 GB) as heap.
+                requests:
+                  memory: 2Gi
+                limits:
+                  memory: 2Gi
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 2Gi

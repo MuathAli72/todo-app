@@ -1,0 +1,96 @@
+# Copies new audit rows from Neon into Elasticsearch, once a minute (decisions 9 and 11).
+# Reads with the read-only "audit_reader" login (decision 16), kept in the neon-audit-reader Secret.
+apiVersion: logstash.k8s.elastic.co/v1alpha1
+kind: Logstash
+metadata:
+  name: audit
+  namespace: elastic
+spec:
+  version: 9.4.3
+  # Elastic's official Docker Hub copy, same reason as Elasticsearch and Kibana.
+  image: docker.io/elastic/logstash:9.4.3
+  count: 1
+  # Connect to the "audit" Elasticsearch. The operator creates a Logstash login there and passes
+  # its address, user, password and certificate in as AUDIT_ES_* environment variables.
+  elasticsearchRefs:
+    - name: audit
+      clusterName: audit
+  config:
+    # One worker is plenty for a few rows a minute.
+    pipeline.workers: 1
+  pipelines:
+    - pipeline.id: audit
+      config.string: |
+        input {
+          jdbc {
+            jdbc_driver_library => "/usr/share/logstash/jdbc/postgresql.jar"
+            jdbc_driver_class => "org.postgresql.Driver"
+            jdbc_connection_string => "${NEON_JDBC_URL}"
+            jdbc_user => "${NEON_USER}"
+            jdbc_password => "${NEON_PASSWORD}"
+            # Every minute.
+            schedule => "* * * * *"
+            # Only rows newer than the last one copied. :sql_last_value is that last Id.
+            # Postgres-only types (jsonb) arrive as objects Logstash can't convert, so they're turned into plain text here.
+            statement => 'SELECT "Id", "OccurredAt", "UserId", "Action", "TargetType", "TargetId", "Changes"::text AS "Changes", "Outcome", "TraceId", "IpAddress"::text AS "IpAddress" FROM "AuditEvents" WHERE "Id" > :sql_last_value ORDER BY "Id" LIMIT 1000'
+            use_column_value => true
+            tracking_column => "Id"
+            tracking_column_type => "numeric"
+            # Keep the column names as they are ("OccurredAt", not "occurredat").
+            lowercase_column_names => false
+            # Where it remembers the last Id: on the operator's persistent disk, so a restart doesn't start over.
+            last_run_metadata_path => "/usr/share/logstash/data/audit_last_run"
+          }
+        }
+        filter {
+          mutate {
+            # In Kibana, an event's time is when it HAPPENED, not when it was copied.
+            copy => { "OccurredAt" => "@timestamp" }
+            remove_field => ["@version"]
+          }
+        }
+        output {
+          elasticsearch {
+            hosts => [ "${AUDIT_ES_HOSTS}" ]
+            user => "${AUDIT_ES_USER}"
+            password => "${AUDIT_ES_PASSWORD}"
+            ssl_certificate_authorities => "${AUDIT_ES_SSL_CERTIFICATE_AUTHORITY}"
+            index => "logstash-audit"
+            # The row's Id becomes the document's id, so copying a row twice overwrites it instead of duplicating it.
+            document_id => "%{Id}"
+            manage_template => false
+            data_stream => "false"
+          }
+        }
+  podTemplate:
+    spec:
+      # Logstash needs Postgres' Java driver, which isn't in the image. This small helper container
+      # downloads it into a shared folder before Logstash starts.
+      initContainers:
+        - name: download-jdbc-driver
+          image: docker.io/curlimages/curl:8.11.1
+          command: ["sh", "-c", "curl -fsSL -o /jdbc/postgresql.jar https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar"]
+          volumeMounts:
+            - name: jdbc-driver
+              mountPath: /jdbc
+      containers:
+        - name: logstash
+          # The Neon login from the Secret, as environment variables.
+          envFrom:
+            - secretRef:
+                name: neon-audit-reader
+          env:
+            # Your RAM worry from decision 11: a small Java heap is enough for this load.
+            - name: LS_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+          resources:
+            requests:
+              memory: 1Gi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: jdbc-driver
+              mountPath: /usr/share/logstash/jdbc
+      volumes:
+        - name: jdbc-driver
+          emptyDir: {}

@@ -1,0 +1,5 @@
+# Values for the ECK operator Helm chart (elastic/eck-operator).
+# docker.elastic.co cuts the download off from this network, so the image
+# comes from Elastic's official copy on Docker Hub instead.
+image:
+  repository: docker.io/elastic/eck-operator

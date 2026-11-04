@@ -1,0 +1,27 @@
+# The window into the audit trail: search, filter and chart the events stored in Elasticsearch.
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: audit
+  namespace: elastic
+spec:
+  version: 9.4.3
+  # Elastic's official Docker Hub copy, same reason as Elasticsearch.
+  image: docker.io/elastic/kibana:9.4.3
+  count: 1
+  config:
+    # Don't send Elastic reports about how Kibana is used.
+    telemetry.optIn: false
+  # Connect to the "audit" Elasticsearch. The operator fills in its address,
+  # certificates and login, so none of that is written here.
+  elasticsearchRef:
+    name: audit
+  podTemplate:
+    spec:
+      containers:
+        - name: kibana
+          resources:
+            requests:
+              memory: 1Gi
+            limits:
+              memory: 1Gi
