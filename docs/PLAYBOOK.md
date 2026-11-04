@@ -2,6 +2,7 @@
 
 How the to-do app runs on Kubernetes, **why** it is built this way, and **how** to install,
 update, roll back, test and fix it. Sections 1–4 are the why; 5–13 are the how.
+Section 14 covers the audit-trail stack (Elasticsearch, Kibana, Logstash).
 
 All commands are PowerShell, run from the repo root (`C:\Projects\todo-app`).
 
@@ -29,6 +30,7 @@ Where the files live:
 |---|---|
 | `deploy/charts/todo-db/` | Helm chart for the database |
 | `deploy/charts/todo-app/` | Helm chart for the front door, frontend, API and migrations |
+| `deploy/elastic/` | Audit-trail stack: operator settings, Elasticsearch, Kibana, Logstash (section 14) |
 | `backend/Dockerfile` | Builds the API image (default) and the migrations image (`--target migrate`) |
 | `frontend/Dockerfile`, `frontend/nginx.conf` | Builds the frontend image |
 | `.github/workflows/*.yml` | CI/CD: tests, then publishes images to GHCR on every merge to main |
@@ -219,6 +221,127 @@ Kubernetes does not move copies back after `uncordon`. To spread them again: `ku
 ```
 helm uninstall todo-app
 helm uninstall todo-db      # ⚠️ deletes the database and its data
+```
+
+---
+
+## 14. Audit-trail stack (Elasticsearch, Kibana, Logstash)
+
+The live app writes every audit event (data changes and account/security events) to the
+`AuditEvents` table in Neon **first**. Logstash copies new rows into Elasticsearch once a minute,
+and Kibana shows them. Everything here runs in its own namespace, `elastic`.
+
+```
+Neon (AuditEvents) ──► Logstash (once a minute, read-only login) ──► Elasticsearch ──► Kibana
+```
+
+### Why it is built this way
+
+| Choice | Why |
+|---|---|
+| **Database first, copy later** | The table is the complete record. Elasticsearch can be wiped and refilled from it, and nothing is lost while this PC is off: Logstash continues from where it stopped. |
+| **ECK operator** | Same pattern as CloudNativePG: we describe what we want, and the operator creates it and looks after it (certificates, passwords, and the logins between the pieces). |
+| **Logstash with a SQL query (JDBC)** | The classic ELK path. It remembers the last copied `Id` (`:sql_last_value`) on its own disk, so each run only asks for newer rows. |
+| **Row `Id` = document id in Elasticsearch** | Copying a row twice overwrites it instead of making a duplicate, so copying again is always safe. |
+| **Read-only `audit_reader` login** | Logstash can only read `AuditEvents`, nothing else. A leaked Logstash password cannot change data or read other tables. |
+| **Images from Docker Hub** (`docker.io/elastic/...`) | Downloads from `docker.elastic.co` get dropped on this network. Same images, different address. |
+
+### Honest limits
+
+- **One Elasticsearch node.** Cluster health can show **yellow**: each index wants a backup copy
+  (replica) on a second node, and there isn't one. Fine for this setup.
+- **Copies only while this PC and the cluster run.** Nothing is lost when they're off, but Kibana
+  is behind until Logstash catches up.
+- **Heavy on RAM:** Elasticsearch 2Gi + Kibana 1Gi + Logstash 1Gi. Pause the app to make room (below).
+
+### Files
+
+| File | What |
+|---|---|
+| `deploy/elastic/eck-operator-values.yaml` | Our settings for the ECK operator's Helm install |
+| `deploy/elastic/elasticsearch.yaml` | Elasticsearch `audit`: 1 node, 2Gi |
+| `deploy/elastic/kibana.yaml` | Kibana `audit`: connects to Elasticsearch `audit`, usage reports to Elastic turned off |
+| `deploy/elastic/logstash.yaml` | Logstash `audit`: the SQL query, the copy schedule, the Postgres driver download |
+
+### Install (once per cluster)
+
+1. **The ECK operator:**
+   ```
+   helm repo add elastic https://helm.elastic.co
+   helm upgrade --install elastic-operator elastic/eck-operator --version 3.5.0 -n elastic-system --create-namespace -f deploy\elastic\eck-operator-values.yaml
+   ```
+   Check: `kubectl get pods -n elastic-system` shows 1 pod `Running`.
+2. **The namespace and the Neon login** (the values in `<...>` are placeholders; the real ones
+   come from Neon and **never go into git**):
+   ```
+   kubectl create namespace elastic
+   kubectl create secret generic neon-audit-reader -n elastic --from-literal=NEON_JDBC_URL="jdbc:postgresql://<neon host>/neondb?sslmode=require" --from-literal=NEON_USER="audit_reader" --from-literal=NEON_PASSWORD="<password>"
+   ```
+   The `audit_reader` role was created in Neon with SQL and may only `SELECT` on `AuditEvents`.
+3. **The three pieces:**
+   ```
+   kubectl apply -f deploy\elastic\elasticsearch.yaml
+   kubectl apply -f deploy\elastic\kibana.yaml
+   kubectl apply -f deploy\elastic\logstash.yaml
+   ```
+   Check: `kubectl get pods -n elastic` shows `audit-es-default-0`, an `audit-kb-...` pod and
+   `audit-ls-0`, all `Running`.
+4. **In Kibana** (open it as below): Data Views → Create data view → Name `Audit events`,
+   Index pattern `logstash-audit`, Timestamp field `@timestamp` → Save data view to Kibana.
+
+### Open Kibana
+
+In a second terminal (it stays busy while the tunnel is open):
+```
+kubectl port-forward service/audit-kb-http 5601 -n elastic
+```
+Copy the `elastic` user's password to the clipboard (it is **not** printed):
+```
+[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((kubectl get secret audit-es-elastic-user -n elastic -o jsonpath="{.data.elastic}"))) | Set-Clipboard
+```
+Open https://localhost:5601 and log in as `elastic`. The browser warns about the certificate
+because the operator made its own: Advanced → Proceed to localhost.
+In Discover, set the time picker wider than the default **Last 15 minutes** to see older events.
+
+### Make room (RAM)
+
+Check what's free: `wsl -d docker-desktop -- free -m` → look at **available**.
+Pause the app's copies (the database keeps running):
+```
+kubectl scale deployment todo-api -n default --replicas=0
+kubectl scale deployment todo-web -n default --replicas=0
+```
+Unpause:
+```
+kubectl scale deployment todo-api -n default --replicas=3
+kubectl scale deployment todo-web -n default --replicas=2
+```
+
+### Check health
+
+| Question | Command | Healthy answer |
+|---|---|---|
+| Are the pieces up? | `kubectl get elasticsearch,kibana,logstash -n elastic` | Elasticsearch `green` or `yellow` (see limits), Kibana `green` |
+| Is Logstash copying? | `kubectl logs -n elastic audit-ls-0 --tail=10` | A `SELECT "Id", ... WHERE "Id" > <number>` line every minute, no errors |
+| Does the cluster have my latest change? | `kubectl get logstash audit -n elastic -o yaml \| Select-String "statement"` | Shows the query that's in your file |
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Elastic image downloads fail or hang | `docker.elastic.co` is blocked on this network | Use `docker.io/elastic/<name>:<version>` |
+| Logstash log: `MissingConverterException ... PGobject` | The query returns a Postgres-only type (like `jsonb`) | Turn it into text in the query: `"Changes"::text AS "Changes"` |
+| Logstash still runs the old query after you edited the file | The change never reached the cluster | `kubectl apply -f deploy\elastic\logstash.yaml`, check it says `configured`, then check with the `Select-String` command above |
+| Logstash log: `403` / `security_exception` | The operator's Logstash login may not write to that index name | Check the index name in `logstash.yaml` |
+| Discover shows nothing | Time picker is on Last 15 minutes, or no data view yet | Widen the time range; create the data view (Install step 4) |
+| Certificate warning on https://localhost:5601 | The operator's own certificate | Expected; continue to localhost |
+
+### Remove
+
+```
+kubectl delete -f deploy\elastic\logstash.yaml
+kubectl delete -f deploy\elastic\kibana.yaml
+kubectl delete -f deploy\elastic\elasticsearch.yaml   # ⚠️ deletes the copies in Elasticsearch (Neon keeps the originals)
 ```
 
 ---
