@@ -9,6 +9,9 @@ spec:
   # Elastic's official Docker Hub copy, same reason as Elasticsearch.
   image: docker.io/elastic/kibana:9.4.3
   count: 1
+  config:
+    # Don't send Elastic reports about how Kibana is used.
+    telemetry.optIn: false
   # Connect to the "audit" Elasticsearch. The operator fills in its address,
   # certificates and login, so none of that is written here.
   elasticsearchRef:
