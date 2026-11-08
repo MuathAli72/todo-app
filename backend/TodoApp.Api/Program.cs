@@ -51,7 +51,10 @@ if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         .WithMetrics(metrics => metrics
             .AddAspNetCoreInstrumentation()
             .AddMeter("System.Runtime")
-            .AddMeter("Npgsql"))
+            .AddMeter("Npgsql")
+            // Exemplars: each latency bucket keeps a few example requests with their trace ID,
+            // so a slow point on a Grafana graph links straight to its trace. Off by default in .NET.
+            .SetExemplarFilter(ExemplarFilterType.TraceBased))
         // Logs: the API's existing log messages go out too.
         .WithLogging()
         // One rider for all three. It reads the Collector's address and protocol from
