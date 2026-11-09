@@ -2,7 +2,8 @@
 
 How the to-do app runs on Kubernetes, **why** it is built this way, and **how** to install,
 update, roll back, test and fix it. Sections 1–4 are the why; 5–13 are the how.
-Section 14 covers the audit-trail stack (Elasticsearch, Kibana, Logstash).
+Section 14 covers the audit-trail stack (Elasticsearch, Kibana, Logstash); section 15 covers
+monitoring, alerts and load tests on the live app.
 
 All commands are PowerShell, run from the repo root (`C:\Projects\todo-app`).
 
@@ -31,6 +32,9 @@ Where the files live:
 | `deploy/charts/todo-db/` | Helm chart for the database |
 | `deploy/charts/todo-app/` | Helm chart for the front door, frontend, API and migrations |
 | `deploy/elastic/` | Audit-trail stack: operator settings, Elasticsearch, Kibana, Logstash (section 14) |
+| `deploy/grafana/` | The on-call dashboard as JSON (section 15) |
+| `loadtest/` | k6 load test for the live app (section 15) |
+| `scripts/` | Helper scripts, e.g. keeping the collector awake during tests (section 15) |
 | `backend/Dockerfile` | Builds the API image (default) and the migrations image (`--target migrate`) |
 | `frontend/Dockerfile`, `frontend/nginx.conf` | Builds the frontend image |
 | `.github/workflows/*.yml` | CI/CD: tests, then publishes images to GHCR on every merge to main |
@@ -343,6 +347,104 @@ kubectl delete -f deploy\elastic\logstash.yaml
 kubectl delete -f deploy\elastic\kibana.yaml
 kubectl delete -f deploy\elastic\elasticsearch.yaml   # ⚠️ deletes the copies in Elasticsearch (Neon keeps the originals)
 ```
+
+## 15. Monitoring, alerts and load tests (live app on Render)
+
+The full story (findings, numbers, decisions) is in the report doc: **To-Do App: SRE Report**
+(https://claude.ai/artifact/666HHfw7twi5vPsSZDaT1h). This section is only **how to run it**.
+
+### Files and settings
+
+| Where | What |
+|---|---|
+| `deploy/grafana/todo-on-call-dashboard.json` | The Grafana dashboard `To-Do App – On-call` (8 rows, 14 panels) |
+| `loadtest/todo-load.js` | k6 load test: 5 test users → 10, realistic mix of actions, pass/fail thresholds |
+| `scripts/keep-collector-awake.ps1` | Pings the telemetry collector every 10 min so it doesn't sleep during a test |
+| `backend/TodoApp.Api/Program.cs` | Fault injection: a request with the secret `X-Fault-Key` header gets a 500 (off unless configured) |
+| Render `todo-app` → Environment | `OTEL_EXPORTER_OTLP_TIMEOUT=90000` (keep it: covers the collector's start-up). `FAULT_INJECTION_KEY` only during an error test, then delete it |
+| Grafana → Alert rules → folder `To-Do App` | 5 alerts: server errors, slow API, lockout, memory, telemetry missing (paused outside tests) |
+
+### Why the collector needs help
+
+Free Render services sleep after 15 idle minutes. The API's own exports **cannot wake** the
+collector, so while it sleeps the API's telemetry is lost. Requests from outside Render (a
+browser, PowerShell) do wake it. So: start the keep-awake script before any test session.
+
+### Before a test session
+
+1. Terminal 1 (leave it running), and wait for `collector: 200`:
+   ```
+   powershell -ExecutionPolicy Bypass -File "C:\Projects\todo-app\scripts\keep-collector-awake.ps1"
+   ```
+2. Grafana → Alert rules → **resume** `API telemetry missing (test sessions only)`.
+3. Open the dashboard on **Last 15 minutes**.
+
+### Normal traffic run (~10.5 min)
+
+Terminal 2. The test accounts' password (8+ characters) is typed, never stored:
+```
+$env:TEST_PASSWORD = Read-Host "Test password"
+$env:TEST_PASSWORD.Length                        # must print 8 or more
+k6 run --vus 1 --duration 30s "C:\Projects\todo-app\loadtest\todo-load.js"   # smoke test first
+$env:K6_WEB_DASHBOARD = "true"
+$env:K6_WEB_DASHBOARD_EXPORT = "$env:USERPROFILE\Documents\k6-normal-traffic.html"
+k6 run "C:\Projects\todo-app\loadtest\todo-load.js"
+```
+Run `Read-Host` on its own line and type the password at the prompt: anything pasted while it
+waits becomes the "password". Live charts: http://localhost:5665 (only while k6 runs). Expected:
+both thresholds ✓, no alert fires.
+
+### Lockout scenario (proves the lockout alert)
+
+```
+1..6 | ForEach-Object { $code = try { (Invoke-WebRequest "https://todo-app-yaw8.onrender.com/api/account/login" -Method Post -ContentType "application/json" -Body '{"email":"loadtest5@example.com","password":"wrong-password-on-purpose"}' -UseBasicParsing -TimeoutSec 90).StatusCode } catch { [int]$_.Exception.Response.StatusCode }; Write-Host "$(Get-Date -f HH:mm:ss) attempt $_ -> $code" }
+```
+Expected: some `401`, then `429`. `Account lockout (429)` fires within ~2 min. The account
+unlocks itself after 5 min.
+
+### Error scenario (proves the server-errors alert)
+
+1. Terminal 2 — makes a key, keeps it in the terminal **and** copies it, in one command:
+   ```
+   $env:FAULT_KEY = [guid]::NewGuid().ToString("N"); $env:FAULT_KEY | Set-Clipboard
+   ```
+2. **Right away** (copying anything else replaces the clipboard): Render → `todo-app` →
+   Environment → `FAULT_INJECTION_KEY` = paste → Save and deploy → wait for **Deploy live**.
+3. Check it works (must print `500`):
+   ```
+   try { (Invoke-WebRequest "https://todo-app-yaw8.onrender.com/api/health" -Headers @{ "X-Fault-Key" = $env:FAULT_KEY } -UseBasicParsing -TimeoutSec 90).StatusCode } catch { [int]$_.Exception.Response.StatusCode }
+   ```
+4. Run with 20% injected failures:
+   ```
+   $env:FAULT_RATE = "0.2"
+   k6 run --vus 5 --duration 8m "C:\Projects\todo-app\loadtest\todo-load.js"
+   ```
+   Expected: errors panel ~20%, `(500)` lines on real endpoints, `API server errors > 5%`
+   firing ~6–7 min in. k6's thresholds fail — that's the point.
+5. **Switch it off:** delete `FAULT_INJECTION_KEY` on Render (Save and deploy), then
+   `Remove-Item Env:FAULT_KEY, Env:FAULT_RATE`.
+
+### After a test session
+
+Stop the keep-awake script (Ctrl+C) and **pause** `API telemetry missing` again.
+
+### Import the dashboard into another Grafana
+
+Grafana → Dashboards → New → Import → upload `deploy/grafana/todo-on-call-dashboard.json` →
+pick the Prometheus and traces data sources when asked.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Traces show only `todo-web` (1 service) | The collector was asleep | Start the keep-awake script; check its Render logs for a start-up |
+| Collector's Render logs empty for days | It never woke up (nothing outside Render called it) | Same as above |
+| k6: every request `401 "Please log in first."` after the first round | k6 clears cookies each round | `noCookiesReset: true` is in the script; keep it |
+| k6: login fails, register returns 400 | Password under 8 characters, or `TEST_PASSWORD` not set | Check `$env:TEST_PASSWORD.Length` |
+| Error run shows no 500s | Terminal key ≠ Render key (often a replaced clipboard), or the deploy isn't live | Step 3's check must print 500 before running |
+| A panel shows 0 or nothing at low traffic | `rate()` needs the counter to move inside one awake process | Judge panels under test traffic; gaps = app asleep, not zero |
+| Legend shows `Value` | `{{name}}` refers to a label that doesn't exist | Type a plain name without braces |
+| Exemplar has no "open trace" button | Grafana Cloud's locked data source expects `traceID`, the data has `trace_id` | Copy the `trace_id` into Explore → traces → TraceQL |
 
 ---
 
