@@ -147,6 +147,28 @@ app.UseCors(policy => policy
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Fault injection, for the load test's "errors" scenario only.
+// Off unless FAULT_INJECTION_KEY is set on the server. Then a request carrying the same value in the
+// X-Fault-Key header gets a 500, as if the endpoint had crashed. Without the key, nothing changes.
+var faultKey = app.Configuration["FAULT_INJECTION_KEY"];
+if (!string.IsNullOrEmpty(faultKey))
+{
+    var expected = System.Text.Encoding.UTF8.GetBytes(faultKey);
+    app.Use(async (context, next) =>
+    {
+        var sent = System.Text.Encoding.UTF8.GetBytes(context.Request.Headers["X-Fault-Key"].ToString());
+        // FixedTimeEquals takes the same time whether the guess is close or not, so the key can't be
+        // worked out by measuring how fast wrong guesses are rejected.
+        if (CryptographicOperations.FixedTimeEquals(sent, expected))
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            await context.Response.WriteAsJsonAsync(new ErrorResponse("Injected fault (load test)."));
+            return;
+        }
+        await next();
+    });
+}
+
 // "Today" for the user, not for the server. The browser sends its time zone (like "Asia/Riyadh")
 // in the X-Time-Zone header. We take the real time (UTC) and convert it to that zone.
 // Missing or unknown zone: use the server's own clock, so Swagger and Postman still work.
