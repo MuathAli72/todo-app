@@ -19,7 +19,7 @@ processors:
   batch: {}
 
 exporters:
-  otlphttp/grafana:
+  otlp_http/grafana:
     endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
     auth:
       authenticator: basicauth/grafana
@@ -27,6 +27,6 @@ exporters:
 service:
   extensions: [basicauth/grafana]
   pipelines:
-    traces:  { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
-    metrics: { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
-    logs:    { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/grafana] }
+    traces:  { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlp_http/grafana] }
+    metrics: { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlp_http/grafana] }
+    logs:    { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlp_http/grafana] }
