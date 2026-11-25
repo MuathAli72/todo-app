@@ -112,7 +112,6 @@ No output means clean.
 | `RENDER_DEPLOY_HOOK_URL` | GitHub → same place → **Secrets** | Render's secret "deploy now" URL |
 | `API_URL` | GitHub → same place → **Variables** | The live API address, baked into the frontend build |
 | `ConnectionStrings__TodoDb` | Render → todo-app → **Environment** | Neon connection string, used by the running API |
-| `Cors__AllowedOrigins__0` | Render → todo-app → **Environment** | The website allowed to call the API: `https://muathali72.github.io` |
 
 On your own computer, the connection string lives in **User Secrets** (`ConnectionStrings:TodoDb`). The `__` in the names above is how environment variables write `:`.
 
@@ -122,7 +121,7 @@ Real problems hit while setting this up. Each one: **what you see → what's rea
 
 | What you see | What's really wrong | The fix |
 |---|---|---|
-| The live site says **CORS error** / "Failed to fetch" | Often the API is **crashing (500)**. A crash response has no CORS header, so the browser reports CORS instead | Open the API address directly (for example `/tasks`) to see the real status, then read **Render → Logs** for the exception line |
+| The live site says **CORS error** / "Failed to fetch" (back when the site was on GitHub Pages; since 25 Nov the live site and API share one address, so this only applies to the Faro collector now) | Often the server is **crashing (500)**. A crash response has no CORS header, so the browser reports CORS instead | Open the API address directly (for example `/tasks`) to see the real status, then read **Render → Logs** for the exception line |
 | A pull request is stuck on **"Expected — waiting for status"** | The workflow file is invalid (for example a step with a `name` but no `run` or `uses`), so the pipeline never started | Actions tab → the red run says **Invalid workflow file** and gives the line number. Fix it and push to the same branch: the PR re-runs by itself |
 | Deploy job: **"Assets file 'project.assets.json' not found"** | Every job runs on its own fresh computer. The deploy job hadn't restored packages | Add a **Restore packages** step to that job |
 | Render says **Deploy live**, but the API still behaves like an **older version** | Stale leftovers in Render's build cache | Render → **Manual Deploy → Clear build cache & deploy**. To check which side is wrong first, run main on your own computer: if it works there, the problem is on Render |
@@ -151,5 +150,5 @@ Real problems hit while setting this up. Each one: **what you see → what's rea
 - **Free hosting sleeps.** The first visit after a quiet period takes about a minute. That's normal, not an error.
 - **Deploy jobs only run after a merge.** A pull request can't test them, so check the Actions tab after every merge.
 - **The tests don't touch the database.** A mistake in how classes map to tables passes CI and only crashes when the app runs. Run the app locally before merging database changes.
-- **A CORS error can hide a crash.** When the API crashes, its error response has no CORS header, so the browser reports CORS. Open the API address directly to see the real status.
+- **A CORS error can hide a crash.** When the API crashes, its error response has no CORS header, so the browser reports CORS. Open the API address directly to see the real status. (The live API no longer uses CORS; the Faro collector still does.)
 - **Rolling back on Render doesn't undo migrations.**

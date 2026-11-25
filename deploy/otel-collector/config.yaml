@@ -9,8 +9,6 @@ receivers:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
-        cors:
-          allowed_origins: ["https://todo-app-yaw8.onrender.com"]
 
 processors:
   memory_limiter:

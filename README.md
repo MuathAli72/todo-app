@@ -290,6 +290,8 @@ npm run dev
 
 Then open the address it prints, usually `http://localhost:5173`.
 
+The website calls `/api` on its own address, and Vite passes those calls to the backend on `localhost:5149` (see `frontend/vite.config.ts`). That's the same one-address setup as the live site, so no CORS is needed. Start the backend first, or every call fails.
+
 **Tests:** Test Explorer in Visual Studio, or `dotnet test` in `backend`.
 
 ## Deployment

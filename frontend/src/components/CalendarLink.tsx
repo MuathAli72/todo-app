@@ -3,7 +3,7 @@ import { apiFetch } from '../api'
 import { API_URL } from '../config'
 import { CalendarLinkSchema } from '../schemas'
 
-/** The full feed address for a token. Works when API_URL is a full address (laptop) or "/api" (live). */
+/** The full feed address for a token. Turns the relative "/api" into a full address, so calendar apps can use it. */
 function feedUrl(token: string): string {
   return new URL(`${API_URL}/calendar/${token}.ics`, window.location.origin).href
 }

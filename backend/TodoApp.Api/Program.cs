@@ -13,7 +13,6 @@ using OpenTelemetry.Trace;
 using TodoApp.Core;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddCors();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateTaskRequestValidator>();
 builder.Services.AddDbContext<TodoDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TodoDb")));
@@ -61,10 +60,6 @@ if (!string.IsNullOrEmpty(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         // the OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_PROTOCOL settings.
         .UseOtlpExporter();
 }
-// Which websites may call this API. On your laptop: the Vite dev server.
-// On the live server: set in Render's settings as Cors__AllowedOrigins__0, so no code change is needed.
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? ["http://localhost:5173"];
 
 // ---------- Accounts (ASP.NET Core Identity, with a login cookie) ----------
 // Identity does the risky parts: password hashing, lockout, and the login cookie.
@@ -134,13 +129,6 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "Todo API"));
 }
-
-app.UseCors(policy => policy
-    .WithOrigins(allowedOrigins)
-    .AllowAnyMethod()
-    .AllowAnyHeader()
-    // Lets the browser send the login cookie to this API from the frontend's address.
-    .AllowCredentials());
 
 // Reads the login cookie on every request, then checks who's allowed where.
 // The order matters: first "who are you", then "are you allowed".

@@ -10,7 +10,7 @@ const BASE = __ENV.BASE_URL || 'https://todo-app-yaw8.onrender.com/api';
 const PASSWORD = __ENV.TEST_PASSWORD;
 
 // example.com is reserved for testing, so these addresses can never belong to a real person.
-const ACCOUNTS = [1, 2, 3, 4, 5].map((n) => `loadtest${n}@example.com`);
+const ACCOUNTS = [1, 2, 3, 4, 5].map((n) => `loadtestb${n}@example.com`);
 
 // Errors scenario (later): when FAULT_KEY and FAULT_RATE are set, that share of requests carries
 // the secret header, and the API answers them with a 500. Without them, nothing changes.
